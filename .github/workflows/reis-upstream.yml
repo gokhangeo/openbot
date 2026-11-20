@@ -1,0 +1,72 @@
+# Reis (gokhangeo/openbot fork'u): her gün nightly-labs/openbot main'ini birleştirir.
+# Çakışma olursa birleştirmez, upstream'den bu depoya bir PR açar (ya da açık olanı bırakır).
+# Ayrıca upstream'in kendi iş akışlarını bu fork'ta kapalı tutar (sırları burada yok, boşuna çalışmasınlar).
+# SYNC_TOKEN: yalnız gokhangeo/openbot için ince ayarlı token (Contents, Pull requests, Workflows, Actions: yazma).
+# GITHUB_TOKEN upstream'in iş akışı dosyası değişikliklerini itemediği için gerekir.
+name: Reis upstream birleştirme
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reis-upstream
+  cancel-in-progress: false
+
+jobs:
+  birlestir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+    steps:
+      - name: Token var mı
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::SYNC_TOKEN secret yok"; exit 1; fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Upstream'i birleştir
+        run: |
+          git config user.name "gokhangeo"
+          git config user.email "gokhantkgm44@gmail.com"
+          git remote add upstream https://github.com/nightly-labs/openbot.git
+          git fetch --no-tags upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Yeni upstream değişikliği yok."; exit 0
+          fi
+          if git merge --no-edit -m "Upstream birleştirme $(date -u +%F)" upstream/main; then
+            git push origin HEAD:main
+            echo "Birleştirildi ve gönderildi."
+          else
+            git diff --name-only --diff-filter=U | tee /tmp/cakisma.txt
+            git merge --abort
+            acik=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open --search "Upstream çakışması" --json number --jq 'length')
+            if [ "${acik:-0}" = "0" ]; then
+              {
+                echo "Günlük upstream birleştirmesi çakıştı; otomatik birleştirme durdu."
+                echo
+                echo "Çakışan dosyalar:"
+                sed 's/^/- /' /tmp/cakisma.txt
+                echo
+                echo "Reis kancaları: apps/mobile/reis/BENIOKU.md"
+              } > /tmp/pr.md
+              gh pr create --repo "$GITHUB_REPOSITORY" --base main --head nightly-labs:main \
+                --title "Upstream çakışması $(date -u +%F)" --body-file /tmp/pr.md
+            fi
+            exit 1
+          fi
+
+      - name: Upstream iş akışlarını kapalı tut
+        if: always()
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate \
+            --jq '.workflows[] | select(.state == "active" and .path != ".github/workflows/reis-upstream.yml") | .id' \
+            | while read -r id; do gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$id/disable" && echo "kapatıldı: $id"; done

@@ -56,6 +56,7 @@ import {
   textDirection,
   textDirectionStyle,
 } from "@/shared/lib/text-direction";
+import { ReisEylemKarti } from "@/reis/eylem-karti";
 import type { BubbleTone } from "../model/bubble-tone";
 import {
   parseFinishedChatMarkdown,
@@ -968,6 +969,11 @@ const MarkdownBlock = memo(function MarkdownBlock({
         />
       </StreamingBlock>
     );
+  }
+  if (tokenIs(token, "code") && token.lang?.trim().toLowerCase() === "reis") {
+    // Reis eklentisi: ajanın istediği telefon işi (src/reis/eylem-karti.tsx).
+    const color = presentation.style.color;
+    return <ReisEylemKarti metin={token.text} renk={typeof color === "string" ? color : undefined} />;
   }
   if (tokenIs(token, "code")) {
     const preview = chatPreviewKind(token.lang);

@@ -6,7 +6,9 @@ import { isMessagingInstallReturn } from "@/features/servers/model/connectors";
 import { isIncomingShareLink } from "@/features/share/model/share-link";
 import { holdShareSheet } from "@/features/share/model/share-sheet-opener";
 
-export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
+export function redirectSystemPath({ path: received, initial }: { path: string; initial: boolean }) {
+  // Reis eklentisi: reis:// bağlantıları (ör. reis://mobile-connect?...) openbot:// gibi işlenir.
+  const path = received.startsWith("reis:") ? `openbot:${received.slice("reis:".length)}` : received;
   if (acceptDevelopmentConnectLink(path, __DEV__)) return null;
   if (isMessagingInstallReturn(path)) return null;
   if (isCompanySignInReturn(path)) return null;

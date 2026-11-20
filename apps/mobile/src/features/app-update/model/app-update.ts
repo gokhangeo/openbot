@@ -15,6 +15,7 @@ import { supportLog } from "@/features/support/model/support-log";
 import { devLatestAppVersion } from "@/shared/lib/dev-feature-overrides";
 import { currentAppVersion, useLatestAppVersion, useMobileFeaturesRefresh } from "@/shared/lib/mobile-features";
 import { isIOS } from "@/shared/lib/platform";
+import { reisKur, useReisGuncelleme } from "@/reis/guncelleme";
 
 export type AppUpdate = { kind: "ready"; id: string } | { kind: "store"; id: string; version: string };
 
@@ -94,6 +95,7 @@ export function useAppUpdate(): AppUpdate | null {
   const { session } = useMobileSession();
   const apiUrl = session?.apiUrl ?? null;
   const latest = useLatestAppVersion(apiUrl ?? "");
+  const reis = useReisGuncelleme();
   const { isUpdatePending, downloadedUpdate, availableUpdate } = Updates.useUpdates();
   const rollbackWaits = availableUpdate?.type === Updates.UpdateInfoType.ROLLBACK && !isUpdatePending;
   const dismissed = useDismissedAppUpdate((state) => (state.ready ? state.dismissed : undefined));
@@ -117,8 +119,9 @@ export function useAppUpdate(): AppUpdate | null {
   const update: AppUpdate | null =
     isUpdatePending && downloadedUpdate
       ? { kind: "ready", id: downloadedUpdateId(downloadedUpdate) }
-      : latest && current && isNewerMobileVersion(latest, current)
-        ? { kind: "store", id: `store:${latest}`, version: latest }
+      : reis
+        ? // Reis eklentisi: App Store yerine imzalı sürüm (src/reis/guncelleme.ts).
+          { kind: "store", id: `reis:${reis.yapi}`, version: reis.surum }
         : null;
   return update && update.id !== dismissed ? update : null;
 }
@@ -134,6 +137,9 @@ export async function installAppUpdate(update: AppUpdate, reloadColor: string): 
 }
 
 export async function openStorePage({ review = false }: { review?: boolean } = {}): Promise<void> {
+  // Reis eklentisi: App Store kaydı yok; güncelleme imzalı sayfadan, puanlama sorulmaz.
+  if (review) return;
+  if (isIOS) return reisKur();
   const query = review && isIOS ? "?action=write-review" : "";
   const [url, webUrl] = isIOS ? [IOS_STORE_URL, IOS_STORE_WEB_URL] : [ANDROID_STORE_URL, ANDROID_STORE_WEB_URL];
   await Linking.openURL(`${url}${query}`).catch(() => Linking.openURL(`${webUrl}${query}`));

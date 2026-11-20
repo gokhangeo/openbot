@@ -8,7 +8,12 @@ const { join } = require("node:path");
 const GOOGLE_SERVICES_FILE = "./google-services.json";
 
 /** @param {{ config: import('expo/config').ExpoConfig }} context */
-module.exports = ({ config }) =>
+const upstreamConfig = ({ config }) =>
   existsSync(join(__dirname, GOOGLE_SERVICES_FILE))
     ? { ...config, android: { ...config.android, googleServicesFile: GOOGLE_SERVICES_FILE } }
     : config;
+
+// Reis eklentisi (gokhangeo/openbot fork'u): ad, paket kimlikleri ve telefon izinleri reis/reis.config.js'de.
+// REIS=0 ile OpenBot'un kendi ayarlarıyla derlenir.
+module.exports = (context) =>
+  process.env.REIS === "0" ? upstreamConfig(context) : require("./reis/reis.config.js")(upstreamConfig(context));
