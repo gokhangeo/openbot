@@ -131,7 +131,7 @@ enum ReisYurutucu {
 
   static func hatirlatici(metin: String, tarih: Date?) async -> String {
     do {
-      guard try await magaza.requestFullAccessToReminders() else { return izinYok("Hatırlatıcılar") }
+      guard try await Self.hatirlaticiIzni(magaza) else { return izinYok("Hatırlatıcılar") }
       let h = EKReminder(eventStore: magaza)
       h.title = metin
       h.calendar = magaza.defaultCalendarForNewReminders()
@@ -148,7 +148,7 @@ enum ReisYurutucu {
 
   static func etkinlik(baslik: String, bas: Date, sureDk: Int, yer: String) async -> String {
     do {
-      guard try await magaza.requestFullAccessToEvents() else { return izinYok("Takvim") }
+      guard try await Self.takvimIzni(magaza) else { return izinYok("Takvim") }
       let ev = EKEvent(eventStore: magaza)
       ev.title = baslik
       ev.startDate = bas
@@ -165,7 +165,7 @@ enum ReisYurutucu {
 
   static func takvimOzet(bas: Date, son: Date, ad: String) async -> String {
     do {
-      guard try await magaza.requestFullAccessToEvents() else { return izinYok("Takvim") }
+      guard try await Self.takvimIzni(magaza) else { return izinYok("Takvim") }
     } catch {
       return "Müdürüm, takvim izni alınamadı."
     }
@@ -242,6 +242,16 @@ enum ReisYurutucu {
     }
     if let u = URL(string: "music://"), await UIApplication.shared.open(u) { return "Spotify yok, Apple Müzik açıldı Müdürüm." }
     return "Müdürüm, müzik uygulaması açılamadı."
+  }
+
+  static func takvimIzni(_ m: EKEventStore) async throws -> Bool {
+    if #available(iOS 17.0, *) { return try await m.requestFullAccessToEvents() }
+    return try await m.requestAccess(to: .event)
+  }
+
+  static func hatirlaticiIzni(_ m: EKEventStore) async throws -> Bool {
+    if #available(iOS 17.0, *) { return try await m.requestFullAccessToReminders() }
+    return try await m.requestAccess(to: .reminder)
   }
 
   static func izinYok(_ ad: String) -> String {
