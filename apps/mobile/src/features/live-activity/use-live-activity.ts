@@ -167,7 +167,9 @@ export function useLiveActivity({
         const base = liveActivityFileName(["bloub", agent.avatarSeed, String(agent.avatarHue ?? ""), mood]);
         written = live.native.saveAvatar(base, dataUrl);
       } catch {}
-      avatars.current.set(file, written);
+      // Reis: çizim başarısızsa kalıcı "yok" diye işaretleme; bir sonraki yayında yeniden dene.
+      if (written) avatars.current.set(file, written);
+      else avatars.current.delete(file);
       if (written) publishRef.current();
     },
     [live],
@@ -177,9 +179,16 @@ export function useLiveActivity({
     (agent: Pick<DynamicIslandAgentIdentity, "avatarSeed" | "avatarHue">, mood: LiveActivityMood): string => {
       const file = liveActivityBloubFile(agent.avatarSeed, agent.avatarHue, mood);
       const saved = avatars.current.get(file);
-      if (saved !== undefined) return saved ?? "";
-      void drawBloub(agent, mood);
-      return avatars.current.get(file) ?? "";
+      if (saved) return saved;
+      if (saved === undefined) void drawBloub(agent, mood);
+      const ready = avatars.current.get(file);
+      if (ready) return ready;
+      // Reis: bu ruh hâlinin çizimi hazır değilse aynı ajanın hazır başka bir çizimini göster (yıldız yerine avatar).
+      for (const other of ["working", "responded", "idle", "waiting", "failed"] as const) {
+        const alt = avatars.current.get(liveActivityBloubFile(agent.avatarSeed, agent.avatarHue, other));
+        if (alt) return alt;
+      }
+      return "";
     },
     [drawBloub],
   );
