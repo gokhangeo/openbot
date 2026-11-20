@@ -12,7 +12,7 @@ import Navigation from "lucide-react-native/icons/navigation";
 import Phone from "lucide-react-native/icons/phone";
 import Search from "lucide-react-native/icons/search";
 import Timer from "lucide-react-native/icons/timer";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
 import { reisTelefon } from "./reis-telefon";
 
@@ -91,16 +91,31 @@ function tanim(e: Eylem): { baslik: string; ayrinti: string; Simge: typeof Phone
   }
 }
 
-export function ReisEylemKarti({ metin, renk }: { metin: string; renk?: string }) {
+// Bu oturumda kendiliğinden çalıştırılan bloklar (kart yeniden çizilince ikinci kez çalışmasın).
+const calistirilanlar = new Set<string>();
+
+export function ReisEylemKarti({ metin, renk, canli = false }: { metin: string; renk?: string; canli?: boolean }) {
   const [durum, setDurum] = useState<"bos" | "calisiyor" | "bitti">("bos");
   const [sonuc, setSonuc] = useState("");
   const eylem = oku(metin);
+  // Yanıt ekranda akarken gelen kart kendiliğinden çalışır; eski sohbetlerdeki kartlar yalnız dokununca.
+  const akarkenGoruldu = useRef(canli || !eylem);
+  if (canli || !eylem) akarkenGoruldu.current = true;
+  const anahtar = metin.trim();
+  useEffect(() => {
+    if (!eylem || !akarkenGoruldu.current || calistirilanlar.has(anahtar)) return;
+    if (eylem.otomatik === false) return;
+    calistirilanlar.add(anahtar);
+    void yap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anahtar, Boolean(eylem)]);
   if (!eylem) {
     // Akış sürerken blok yarımdır; tamamlanınca kart görünür.
     return <Text style={{ color: renk, opacity: 0.6 }}>…</Text>;
   }
   const { baslik, ayrinti, Simge, dugme } = tanim(eylem);
-  const yap = async () => {
+  async function yap() {
+    if (!eylem) return;
     if (durum === "calisiyor") return;
     setDurum("calisiyor");
     try {
@@ -116,7 +131,7 @@ export function ReisEylemKarti({ metin, renk }: { metin: string; renk?: string }
       setSonuc(`Müdürüm, olmadı: ${hata instanceof Error ? hata.message : String(hata)}`);
     }
     setDurum("bitti");
-  };
+  }
   return (
     <View
       style={{

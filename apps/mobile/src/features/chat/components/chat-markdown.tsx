@@ -973,7 +973,7 @@ const MarkdownBlock = memo(function MarkdownBlock({
   if (tokenIs(token, "code") && token.lang?.trim().toLowerCase() === "reis") {
     // Reis eklentisi: ajanın istediği telefon işi (src/reis/eylem-karti.tsx).
     const color = presentation.style.color;
-    return <ReisEylemKarti metin={token.text} renk={typeof color === "string" ? color : undefined} />;
+    return <ReisEylemKarti metin={token.text} renk={typeof color === "string" ? color : undefined} canli={presentation.streaming} />;
   }
   if (tokenIs(token, "code")) {
     const preview = chatPreviewKind(token.lang);

@@ -28,8 +28,8 @@ Required Notice: Copyright 2026 Synthetify Labs spółka z ograniczoną odpowied
 
 ## Ajanların telefon işi yaptırması (eylem kartı)
 
-Ajan yanıtına dili `reis` olan bir kod bloğu koyar; Reis bunu dokunulabilir bir kart olarak gösterir,
-kullanıcı dokununca işi telefonda yapar ve sonucu kartın altına yazar. OpenBot'un sunucusuna dokunmak gerekmez;
+Ajan yanıtına dili `reis` olan bir kod bloğu koyar; Reis bunu kart olarak gösterir, yanıt ekranda akarken gelen kartı
+kendiliğinden çalıştırır (eski sohbetlerdeki kartlar yalnız dokununca; `"otomatik":false` ile kapatılır), işi telefonda yapar ve sonucu kartın altına yazar. OpenBot'un sunucusuna dokunmak gerekmez;
 ajanın talimatına (Ayarlar → Ajan → Talimatlar) aşağıdaki metni eklemek yeter.
 
 ```text
@@ -44,7 +44,8 @@ uygulamada arama, yol tarifi ya da müzik isterse, yanıtına dili "reis" olan b
 {"tur":"ac","uygulama":"spotify"} · {"tur":"uygulamada_ara","uygulama":"youtube","sorgu":"..."} ·
 {"tur":"yol","hedef":"...","ulasim":"araba|yuru|toplu"} · {"tur":"muzik","sorgu":"..."} · {"tur":"url","url":"https://..."}
 Saatler Türkiye saatiyle. Kişiyi kullanıcının dediği gibi yaz ("kızım", "Ahmet"); Reis rehberden bulur, bulamazsa bir kez seçtirir.
-Kartın yanına kısa bir cümle yaz; "telefonunuzdan kendiniz yapın" deme.
+Bir kişiyle WhatsApp'ı aç/yaz denirse "ac" değil {"tur":"mesaj","kisi":"...","kanal":"whatsapp","metin":""} kullan.
+Kart yanıt gelir gelmez kendiliğinden çalışır; kartın yanına kısa bir cümle yaz; "telefonunuzdan kendiniz yapın" deme.
 ```
 
 ## Güncelleme
