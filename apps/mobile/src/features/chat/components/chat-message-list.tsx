@@ -146,6 +146,7 @@ import { ChatVideoGeneration } from "./chat-video-generation";
 import { HistoryShownContext } from "./use-history-shown";
 import { KeptOpenContext } from "./use-kept-open";
 import { useReplyHaptics } from "./use-reply-haptics";
+import { ReisMesajZamani } from "@/reis/eylem-karti";
 
 const TAP_SLOP = 10;
 const TAP_DURATION_MS = 400;
@@ -879,6 +880,7 @@ const MessageRow = memo(function MessageRow({
             </Button.Label>
           </Button>
         ) : null}
+        <ReisMesajZamani value={"createdAt" in message && typeof message.createdAt === "string" ? message.createdAt : undefined}>{/* Reis */}
         {message.body.trim() ? (
           tableOutside && !selecting ? (
             <ChatFileActionsContext value={openMessageFile}>
@@ -913,6 +915,7 @@ const MessageRow = memo(function MessageRow({
             )
           )
         ) : null}
+        </ReisMesajZamani>
       </Animated.View>
     );
   if (message.kind !== "message") return rendered;

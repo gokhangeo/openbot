@@ -12,7 +12,7 @@ import Navigation from "lucide-react-native/icons/navigation";
 import Phone from "lucide-react-native/icons/phone";
 import Search from "lucide-react-native/icons/search";
 import Timer from "lucide-react-native/icons/timer";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
 import { reisTelefon } from "./reis-telefon";
 
@@ -91,6 +91,16 @@ function tanim(e: Eylem): { baslik: string; ayrinti: string; Simge: typeof Phone
   }
 }
 
+// Kartın içinde bulunduğu mesajın zamanı (chat-message-list sağlar). Yeni mesajdaki kart kendiliğinden çalışır.
+export const ReisMesajZamani = createContext<string | undefined>(undefined);
+const YENI_SAYILIR_MS = 2 * 60 * 1000;
+
+function yeniMi(zaman: string | undefined): boolean {
+  if (!zaman) return false;
+  const t = Date.parse(zaman);
+  return Number.isFinite(t) && Math.abs(Date.now() - t) < YENI_SAYILIR_MS;
+}
+
 // Bu oturumda kendiliğinden çalıştırılan bloklar (kart yeniden çizilince ikinci kez çalışmasın).
 const calistirilanlar = new Set<string>();
 
@@ -99,9 +109,10 @@ export function ReisEylemKarti({ metin, renk, canli = false }: { metin: string; 
   const [sonuc, setSonuc] = useState("");
   const eylem = oku(metin);
   // Yanıt ekranda akarken gelen kart kendiliğinden çalışır; eski sohbetlerdeki kartlar yalnız dokununca.
-  const akarkenGoruldu = useRef(canli || !eylem);
+  const mesajZamani = useContext(ReisMesajZamani);
+  const akarkenGoruldu = useRef(canli || !eylem || yeniMi(mesajZamani));
   if (canli || !eylem) akarkenGoruldu.current = true;
-  const anahtar = metin.trim();
+  const anahtar = `${mesajZamani ?? ""}|${metin.trim()}`;
   useEffect(() => {
     if (!eylem || !akarkenGoruldu.current || calistirilanlar.has(anahtar)) return;
     if (eylem.otomatik === false) return;
