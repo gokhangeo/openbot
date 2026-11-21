@@ -62,6 +62,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "ביטול השתקה",
   "mobile.agent.menu.hide": "הסתרה",
   "mobile.agent.menu.info": "מידע",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "עוד",
   "mobile.agent.menu.copyId": "העתקת ID",
   "mobile.agent.menu.duplicate": "שכפול",

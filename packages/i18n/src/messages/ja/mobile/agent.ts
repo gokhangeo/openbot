@@ -63,6 +63,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "ミュートを解除",
   "mobile.agent.menu.hide": "非表示",
   "mobile.agent.menu.info": "情報",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "その他",
   "mobile.agent.menu.copyId": "ID をコピー",
   "mobile.agent.menu.duplicate": "複製",

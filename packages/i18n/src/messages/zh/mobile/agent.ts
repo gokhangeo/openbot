@@ -62,6 +62,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "取消静音",
   "mobile.agent.menu.hide": "隐藏",
   "mobile.agent.menu.info": "信息",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "更多",
   "mobile.agent.menu.copyId": "复制 ID",
   "mobile.agent.menu.duplicate": "复制一份",

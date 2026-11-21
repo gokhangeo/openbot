@@ -104,6 +104,11 @@ function useAgentMenuActions(agent: MobileAgent) {
   };
   const handleInfo = () =>
     router.push({ pathname: "/agent-info/[agentId]", params: { agentId: agent.id, serverId: agent.serverId } });
+  const handleCall = () => {
+    void haptics.impact("soft");
+    router.push({ pathname: "/chat/[agentId]", params: { agentId: agent.id, serverId: agent.serverId, call: "1" } });
+  };
+
   const handleDuplicate = () => {
     void runAgentAction("duplicate");
   };
@@ -119,6 +124,7 @@ function useAgentMenuActions(agent: MobileAgent) {
     handleMute,
     handleHide,
     handleInfo,
+    handleCall,
     handleCopyId,
     handleDuplicate,
     handleDelete,
@@ -139,6 +145,7 @@ function useAgentContextMenu(agent: MobileAgent) {
     handleMute,
     handleHide,
     handleInfo,
+    handleCall,
     handleCopyId,
     handleDuplicate,
     handleDelete,
@@ -160,6 +167,9 @@ function useAgentContextMenu(agent: MobileAgent) {
         {t("mobile.agent.menu.hide")}
       </Link.MenuAction>
       {sectionMenu.menu}
+      <Link.MenuAction icon="phone" onPress={handleCall}>
+        {t("mobile.agent.menu.call")}
+      </Link.MenuAction>
       <Link.MenuAction icon="info.circle" onPress={handleInfo}>
         {t("mobile.agent.menu.info")}
       </Link.MenuAction>
@@ -266,6 +276,7 @@ function OpenAgentMenu({
     handleMute,
     handleHide,
     handleInfo,
+    handleCall,
     handleCopyId,
     handleDuplicate,
     handleDelete,
@@ -289,6 +300,7 @@ function OpenAgentMenu({
     },
     ...(canMute ? [muteAction] : []),
     { id: "hide", title: t("mobile.agent.menu.hide"), image: "eye.slash" },
+    { id: "call", title: t("mobile.agent.menu.call"), image: "phone" },
     ...sectionMenu.androidActions,
     { id: "info", title: t("mobile.agent.menu.info"), image: "info.circle" },
     {
@@ -308,6 +320,7 @@ function OpenAgentMenu({
     mute: handleMute,
     hide: handleHide,
     info: handleInfo,
+    call: handleCall,
     copy: handleCopyId,
     duplicate: handleDuplicate,
     delete: handleDelete,
