@@ -19,7 +19,7 @@
           "NSAllowsLocalNetworking": true
         },
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["fetch"],
+        "UIBackgroundModes": ["fetch", "audio", "voip"],
         "BGTaskSchedulerPermittedIdentifiers": ["run.openbot.mobile.refresh"]
       },
       "icon": "./assets/icons/app-icon.icon"

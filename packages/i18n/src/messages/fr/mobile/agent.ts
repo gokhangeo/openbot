@@ -63,6 +63,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "Réactiver le son",
   "mobile.agent.menu.hide": "Masquer",
   "mobile.agent.menu.info": "Infos",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "Plus",
   "mobile.agent.menu.copyId": "Copier l’ID",
   "mobile.agent.menu.duplicate": "Dupliquer",

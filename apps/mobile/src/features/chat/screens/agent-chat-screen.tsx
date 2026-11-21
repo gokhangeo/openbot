@@ -21,10 +21,11 @@ export function AgentChatScreen() {
   const { t } = useText();
   const leaveChat = useLeaveChat();
 
-  const { agentId, messageId, focusAt } = useLocalSearchParams<{
+  const { agentId, messageId, focusAt, call } = useLocalSearchParams<{
     agentId: string;
     messageId?: string;
     focusAt?: string;
+    call?: string;
   }>();
   const foreground = useThemeColor("foreground");
   const insets = useSafeAreaInsets();
@@ -48,6 +49,7 @@ export function AgentChatScreen() {
         agent={agent}
         focusMessageId={resolvedMessageId || undefined}
         onLeave={leaveChat}
+        autoCall={firstParam(call) === "1"}
       />
     );
   }

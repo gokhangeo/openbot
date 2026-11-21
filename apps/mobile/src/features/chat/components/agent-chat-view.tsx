@@ -58,10 +58,12 @@ export function MobileChatView({
   agent,
   focusMessageId,
   onLeave,
+  autoCall,
 }: {
   agent: MobileAgent;
   focusMessageId?: string;
   onLeave: () => void;
+  autoCall?: boolean;
 }) {
   const { t } = useText();
   const workspace = useMobileWorkspaceReader();
@@ -486,6 +488,7 @@ export function MobileChatView({
       onLeave={onLeave}
       onSwipeForward={swipeForward}
       onPullPastEnd={pullOn ? openInfo : null}
+      autoCall={autoCall}
     />
   );
 }

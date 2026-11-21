@@ -70,6 +70,7 @@ import { showsOnline } from "@/features/workspace/model/server-status";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { reisArama } from "@/reis/reis-arama";
 import { END_X } from "@/shared/lib/text-direction";
 import { useAppActive } from "@/shared/lib/use-app-active";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
@@ -170,6 +171,7 @@ export interface ChatViewProps {
   onLeave: () => void;
   onSwipeForward?: (() => void) | null;
   onPullPastEnd?: (() => void) | null;
+  autoCall?: boolean;
 }
 
 const CHAT_BACK_EDGE_WIDTH = 24;
@@ -283,6 +285,7 @@ export function ChatView({
   onLeave: leaveConversation,
   onSwipeForward = null,
   onPullPastEnd = null,
+  autoCall = false,
 }: ChatViewProps) {
   const { t, errorMessage } = useText();
   const workspace = useMobileWorkspaceReader();
@@ -689,6 +692,22 @@ export function ChatView({
     caption: liveCaption,
   } = live;
   const voiceName = voiceAgent?.name ?? target.name;
+  const handleCall = useCallback(() => {
+    if (target.kind !== "agent") return;
+    const callId = `${target.id}-${Date.now()}`;
+    if (reisArama) {
+      void reisArama.startCall(callId, target.id, target.name).catch(() => {});
+      const subscription = reisArama.addListener("onCallEnded", (event: any) => {
+        if (event?.callId !== callId) return;
+        liveEnd();
+        subscription.remove();
+      });
+    }
+    liveStart();
+  }, [target, liveStart, liveEnd]);
+  useEffect(() => {
+    if (autoCall) handleCall();
+  }, [autoCall, handleCall]);
   const liveVoiceMissing = voiceMissing && (conversation !== null || liveChannel !== null);
   const composerVoice = useMemo((): ComposerVoice | undefined => {
     if (!liveAvailable && !liveOpen && !liveVoiceMissing) return undefined;
@@ -1151,6 +1170,7 @@ export function ChatView({
                 topInset={insets.top}
                 onBack={leaveConversation}
                 threadMenu={threadMenu}
+                onCall={target.kind === "agent" ? handleCall : undefined}
               />
               {target.kind === "agent" ? (
                 <ChatBackdropUndo

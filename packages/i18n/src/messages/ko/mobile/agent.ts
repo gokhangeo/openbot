@@ -62,6 +62,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "음소거 해제",
   "mobile.agent.menu.hide": "숨기기",
   "mobile.agent.menu.info": "정보",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "더 보기",
   "mobile.agent.menu.copyId": "ID 복사",
   "mobile.agent.menu.duplicate": "복제",

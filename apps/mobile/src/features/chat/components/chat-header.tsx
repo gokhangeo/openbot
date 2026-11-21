@@ -5,6 +5,7 @@ import { useThemeColor } from "heroui-native/hooks";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Trash from "lucide-react-native/icons/trash";
+import Phone from "lucide-react-native/icons/phone";
 import { memo, useMemo } from "react";
 import { Pressable, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -49,6 +50,7 @@ interface ChatHeaderProps {
   actionsMenu?: { label: string; actions: MenuAction[]; onPressAction: (id: string) => void } | null;
   threadMenu?: ChatThreadMenu;
   deleteAction?: { label: string; disabled: boolean; onPress: () => void };
+  onCall?: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -66,6 +68,7 @@ export const ChatHeader = memo(function ChatHeader({
   actionsMenu,
   threadMenu,
   deleteAction,
+  onCall,
 }: ChatHeaderProps) {
   const { t } = useText();
   const { theme } = useUniwind();
@@ -342,6 +345,16 @@ export const ChatHeader = memo(function ChatHeader({
       <Trash color={iconColor} size={22} strokeWidth={2} />
     </ChatGlassIconButton>
   ) : null;
+  const callButton = onCall ? (
+    <ChatGlassIconButton
+      accessibilityLabel={t("mobile.agent.menu.call")}
+      fallbackBackground={fallbackBackground}
+      liquidGlassAvailable={liquidGlassAvailable}
+      onPress={onCall}
+    >
+      <Phone color={iconColor} size={22} strokeWidth={2} />
+    </ChatGlassIconButton>
+  ) : null;
   const trailingButtons =
     actionsMenu === null ? null : actionsMenu ? (
       <MenuView
@@ -390,6 +403,14 @@ export const ChatHeader = memo(function ChatHeader({
           </Stack.Title>
         )}
         <Stack.Toolbar placement="right">
+          {onCall ? (
+            <Stack.Toolbar.Button
+              icon="phone"
+              accessibilityLabel={t("mobile.agent.menu.call")}
+              hidden={accessibilityHidden}
+              onPress={onCall}
+            />
+          ) : null}
           {deleteAction ? (
             <Stack.Toolbar.Button
               icon="trash"
@@ -470,7 +491,7 @@ export const ChatHeader = memo(function ChatHeader({
           {titlePill}
         </View>
         <View className="flex-1" />
-        {deleteButton ?? trailingButtons}
+        {callButton}{deleteButton ?? trailingButtons}
       </View>
       <SheetScrollEdgeEffect
         style={{ height: topInset + 82, left: 0, position: "absolute", right: 0, top: 0, zIndex: 10 }}

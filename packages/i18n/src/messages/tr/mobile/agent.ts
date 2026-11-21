@@ -62,6 +62,7 @@ export const messages = {
   "mobile.agent.menu.unmute": "Sesi aç",
   "mobile.agent.menu.hide": "Gizle",
   "mobile.agent.menu.info": "Bilgi",
+  "mobile.agent.menu.call": "Ara",
   "mobile.agent.menu.more": "Daha fazla",
   "mobile.agent.menu.copyId": "Kimliği kopyala",
   "mobile.agent.menu.duplicate": "Çoğalt",

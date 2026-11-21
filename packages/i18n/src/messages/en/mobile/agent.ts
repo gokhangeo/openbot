@@ -61,6 +61,7 @@ export const messages = defineMessages("mobile.agent", {
   "mobile.agent.menu.unmute": "Unmute",
   "mobile.agent.menu.hide": "Hide",
   "mobile.agent.menu.info": "Info",
+  "mobile.agent.menu.call": "Call",
   "mobile.agent.menu.more": "More",
   "mobile.agent.menu.copyId": "Copy ID",
   "mobile.agent.menu.duplicate": "Duplicate",

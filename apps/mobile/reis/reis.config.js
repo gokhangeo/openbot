@@ -30,6 +30,7 @@ const IZINLER = {
   NSRemindersFullAccessUsageDescription: "Sizin isteğinizle hatırlatıcı eklemek için kullanılır.",
   NSRemindersUsageDescription: "Sizin isteğinizle hatırlatıcı eklemek için kullanılır.",
   NSAlarmKitUsageDescription: "Sizin isteğinizle alarm ve zamanlayıcı kurmak için kullanılır.",
+  NSMicrophoneUsageDescription: "Ajanla sesli arama yapmak için mikrofon kullanılır.",
 };
 
 const SEMALAR = [
@@ -54,6 +55,7 @@ module.exports = (config) => {
       infoPlist: {
         ...ios.infoPlist,
         ...IZINLER,
+        UIBackgroundModes: ["voip", "audio", "fetch"],
         LSApplicationQueriesSchemes: [...new Set([...(ios.infoPlist?.LSApplicationQueriesSchemes ?? []), ...SEMALAR])],
       },
     },
