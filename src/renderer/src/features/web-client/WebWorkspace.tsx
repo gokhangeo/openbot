@@ -17,6 +17,7 @@ import {
   type ClientAgentModelOption,
   canAdministerServer,
   decodeAgentBackupModelSettings,
+  decodeAgentBuiltinMemorySettings,
   decodeAgentDefaultsOverview,
   decodeAgentFastModeSettings,
   decodeAgentHostSettings,
@@ -35,6 +36,7 @@ import type { PricingOrder } from "@openbot/contracts/license";
 import type { MarketplaceListingLink } from "@openbot/contracts/marketplace-links";
 import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
+import { AGENT_BUILTIN_MEMORY_ROUTES } from "@openbot/contracts/team-protocol/agent-builtin-memory-v1";
 import { AGENT_DEFAULTS_ROUTES } from "@openbot/contracts/team-protocol/agent-defaults-v1";
 import { AGENT_FAST_MODE_ROUTES } from "@openbot/contracts/team-protocol/agent-fast-mode-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
@@ -156,6 +158,7 @@ import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
 import { LicenseSection } from "@openbot/ui/features/billing/LicenseSection";
 import { createLicenseStore } from "@openbot/ui/features/billing/license-store";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
+import { MAIN_THREAD_ID } from "@openbot/ui/features/conversation/threads/thread-types";
 import { LeaveServerDialog } from "@openbot/ui/features/servers/LeaveServerDialog";
 import { RestartServerDialog } from "@openbot/ui/features/servers/RestartServerDialog";
 import type { ServerActionCallbacks } from "@openbot/ui/features/servers/ServerActionItems";
@@ -217,6 +220,7 @@ import {
 } from "../../lazy-views";
 import { PlatformProvider } from "../../platform";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
+import { startupLoadingScene } from "../../startup-animation-preference";
 import { WorkspaceFrame } from "../../WorkspaceFrame";
 import {
   ChannelCreateOverlay,
@@ -933,6 +937,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     agents: () => workspace.profiles(),
   });
   const providerSettings = providerAdmin.settings;
+  const liveVoiceAccount = () => {
+    const choose = providerSettings()?.accountActions?.setLiveVoiceAccount;
+    const codex = providerAdmin.status().providers?.find((row) => row.id === "codex");
+    if (!choose || !codex?.accounts) return undefined;
+    return { accounts: codex.accounts, accountId: codex.liveVoiceAccount ?? null, choose };
+  };
   const accountUsage = () => withHostAccountUsage(usageReading.accountUsage(), providerAdmin.hostAccounts.limits());
   const agentAccountChoice = createMemo(
     () => workspace.runtime.admin !== undefined && serverCanAdminister(server(), PROVIDER_ACCOUNTS_CAPABILITY),
@@ -1067,6 +1077,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           agentId,
           quickAcknowledgement,
         }),
+      getAgentBuiltinMemory: (agentId, serverId) =>
+        hostRequest(serverId)("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, decodeAgentBuiltinMemorySettings, {
+          agentId,
+        }),
+      updateAgentBuiltinMemory: ({ agentId, memory }, serverId) =>
+        hostRequest(serverId)("POST", AGENT_BUILTIN_MEMORY_ROUTES.update, decodeAgentBuiltinMemorySettings, {
+          agentId,
+          memory,
+        }),
       getAgentFastMode: async (agentId, serverId) =>
         workspace.state.capabilities.includes(AGENT_SPEED_CAPABILITY)
           ? agentFastModeSettings(
@@ -1107,6 +1126,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const backupModels = remoteAgentAdmin.backupModels();
     const usageLimitReturn = remoteAgentAdmin.usageLimitReturn();
     const quickAcknowledgement = remoteAgentAdmin.quickAcknowledgement();
+    const memory = remoteAgentAdmin.memory();
     const fastMode = remoteAgentAdmin.fastMode();
     const ultrafast = remoteAgentAdmin.ultrafast();
     const computerUse = remoteAgentAdmin.computerUse();
@@ -1120,6 +1140,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           ...(backupModels ? { backupModels } : {}),
           ...(usageLimitReturn ? { usageLimitReturn } : {}),
           ...(quickAcknowledgement === undefined ? {} : { quickAcknowledgement }),
+          ...(memory === undefined ? {} : { memory }),
           ...(typeof fastMode === "boolean" ? { fastMode, ultrafast } : {}),
           ...(computerUse === undefined ? {} : { computerUse }),
           ...(allowNewChat === undefined ? {} : { allowNewChat }),
@@ -2401,6 +2422,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const agent = conversationAgent();
     return ask && agent ? { agentId: agent.id, ask } : undefined;
   });
+  const sidebarActiveAgentId = () => (tasksOpen() || channelOpen() ? "" : (workspace.state.selectedId ?? ""));
   const sidebarThreads = createMemo(() => {
     const current = agentThreads();
     if (!current) return undefined;
@@ -2411,7 +2433,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return sidebarAgentThreads({
       tasks: current.tasks,
       tabs: current.tabs,
-      activeAgentId: () => (tasksOpen() || channelOpen() ? "" : (workspace.state.selectedId ?? "")),
+      activeAgentId: sidebarActiveAgentId,
       waits: () => ({
         approvals: workspace.state.approvals,
         prompts: workspace.state.prompts,
@@ -2673,6 +2695,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         onExited={cover ? () => setLoadingCover(false) : undefined}
         fullWindow={fullWindowLoading()}
         screen={!frameConnecting()}
+        loadingScene={startupLoadingScene()}
         issue={workspace.state.hostedIssue}
         start={workspace.state.hostedStart}
         updateVersion={workspace.state.hostRestart?.version ?? null}
@@ -3075,7 +3098,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         ...serverActionCallbacks,
                       }}
                       agents={workspace.profiles()}
-                      activeAgentId={tasksOpen() || channelOpen() ? "" : (workspace.state.selectedId ?? "")}
+                      activeAgentId={sidebarActiveAgentId()}
                       agentThreads={sidebarThreads()}
                       people={[]}
                       directThreads={[]}
@@ -3111,6 +3134,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       onReorderPinned={workspace.preferences.reorderPinnedSidebarItems}
                       onReorderPeople={() => {}}
                       onSelectAgent={(id) => {
+                        if (id === sidebarActiveAgentId() && !pageCovered())
+                          agentThreads()?.tabs.open(id, MAIN_THREAD_ID);
                         setMobilePane("conversation");
                         void select(id);
                       }}
@@ -3258,6 +3283,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         onOpenChange={setAccountSettingsOpen}
                         account={account()}
                         calls={accountCalls}
+                        liveVoiceAccount={liveVoiceAccount()}
                         language={props.language}
                         onChangeLanguage={props.onChangeLanguage}
                         appearance={props.appearance}
@@ -3430,7 +3456,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   <GlobalSearchOverlay
                     open={searchOpen()}
                     agents={searchAgents()}
-                    channels={channels.supported() ? globalSearchChannels(channels.state.channels) : undefined}
+                    channels={
+                      channels.supported() ? globalSearchChannels(channels.state.channels, text.sourceText) : undefined
+                    }
                     onSearchMessages={searchAllMessages}
                     onSearchFiles={fileSearch()}
                     routines={searchRoutines()}
@@ -3821,6 +3849,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   agentAutoApproves={remoteAgentAdmin.autoApproves()}
                   remoteBackupModelsLoaded={remoteAgentAdmin.backupModels() !== undefined}
                   remotePlanCardLoaded={remoteAgentAdmin.quickAcknowledgement() !== undefined}
+                  remoteBuiltinMemoryLoaded={remoteAgentAdmin.memory() !== undefined}
                   remoteComputerUseLoaded={remoteAgentAdmin.computerUse() !== undefined}
                   remoteNewChatLoaded={remoteAgentAdmin.allowNewChat() !== undefined}
                   remoteBusyMessageModeLoaded={remoteAgentAdmin.busyMessageMode() !== undefined}

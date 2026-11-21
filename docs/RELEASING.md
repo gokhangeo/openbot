@@ -26,7 +26,8 @@ Installed apps do not wait for a release to get a new provider CLI: they offer t
 release (see [Provider CLI updates](architecture/providers.md#provider-cli-updates)). The pinned version is the
 first-install fallback. To stop a broken upstream release, add its version to the provider's list in
 `provider-runtime-blocklist.json` and merge it to `main`. Apps read the list at their next check. A
-blocked version is no longer offered, but it stays on the computers that already installed it.
+blocked version is no longer offered. An OpenBot copy that already runs a blocked version moves to the
+newest version that is not blocked, also when that version is older. A CLI that the user installed stays.
 
 ## One-time GitHub setup
 
@@ -878,8 +879,9 @@ MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 
 It prints a table per platform and for servers, and writes `.openbot-build/release-health/report.json`.
 The metrics are finished starts, crashes, startup crashes, quit hangs, and update arrivals: the share
-of the computers that started an update install and then started the new release. The thresholds are
-in the script header.
+of the computers that started an update install and then started a version other than the one that
+installed it, before the end of the window. An install of an older release that a computer downloaded
+earlier counts for the window in which it started. The thresholds are in the script header.
 
 - Exit code 0: no metric is clearly worse. Raise the rollout.
 - Exit code 1: a metric is clearly worse. Keep the rollout where it is, find the cause, and publish a

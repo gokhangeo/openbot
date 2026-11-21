@@ -30,6 +30,8 @@ export const messages = {
   "settings.movingFaces.title": "Hareketli ajan yüzleri",
   "settings.movingFaces.description":
     "Ajan yüzleri göz kırpar ve hareket eder. GPU’su olmayan bir bilgisayarda başta durağandır.",
+  "settings.startupAnimation.title": "Açılış animasyonu",
+  "settings.startupAnimation.description": "OpenBot açılırken ajan animasyonunu gösterir.",
   "settings.logoColor.title": "Logo rengi",
   "settings.logoColor.description": "Dock'ta, görev çubuğunda ve Dynamic Island'da gösterilir.",
   "settings.logoColor.buildNote": "Bu derleme kendi logo rengini korur. Seçim, yayımlanan uygulamaya uygulanır.",
@@ -735,6 +737,9 @@ export const messages = {
   "settings.voice.talkKey.refused": "Bir tuş daha ekleyin",
   "settings.voice.talkKey.reset": "Sıfırla",
   "settings.voice.live.signIn": "Canlı sesi kullanmak için ChatGPT hesabınızla Codex'e giriş yapın.",
+  "settings.voice.live.account": "Hesap",
+  "settings.voice.live.accountAutomatic": "Otomatik",
+  "settings.voice.live.accountDescription": "Canlı sesin kullandığı ChatGPT hesabı. Planı sesi içeren bir hesap seçin.",
   "settings.transfer.title": "Bu sunucuyu başka bir bilgisayara taşıyın",
   "settings.transfer.lede": "Ajanlarınız, becerileri, rutinleri, bellekleri ve dosyaları tek bir dosyada toplanır.",
   "settings.transfer.flow.label": "Aktarım nasıl çalışır",

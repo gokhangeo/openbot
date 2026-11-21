@@ -91,6 +91,7 @@ export const messages = {
   "error.team.routineFlowStopUnsupported": "To połączenie nie może zatrzymać uruchomienia rutyny.",
   "error.team.sidebarFoldersUnsupported": "To połączenie nie obsługuje folderów w folderach.",
   "error.team.libraryFoldersUnsupported": "To połączenie nie obsługuje folderów Biblioteki.",
+  "error.team.workflowFoldersUnsupported": "To połączenie nie obsługuje folderów przepływów pracy.",
   "error.team.agentNotificationLevelsUnsupported":
     "Ten serwer nie może zapisać Twojego poziomu powiadomień dla każdego agenta. Zaktualizuj OpenBot na komputerze, na którym działa.",
   "error.team.sidebarPinsUnsupported":
@@ -190,6 +191,7 @@ export const messages = {
   "error.team.hostPersonalityUnsupported": "To połączenie nie obsługuje osobowości serwera.",
   "error.team.agentWaitsUnsupported": "To połączenie nie obsługuje otwartych oczekiwań.",
   "error.team.pendingApprovalUnsupported": "To połączenie nie pozwala odczytać całej prośby o zgodę.",
+  "error.team.pendingPromptsUnsupported": "To połączenie nie obsługuje odczytu otwartych pytań.",
   "error.team.phoneFeedbackUnsupported": "To połączenie nie pozwala wysłać zgłoszenia z aplikacji na telefon.",
   "error.team.messagePinsUnsupported": "To połączenie nie obsługuje przypiętych wiadomości.",
   "error.team.queuedMessageThreadUnsupported":

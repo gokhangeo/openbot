@@ -395,7 +395,10 @@ The runtime manager offers the latest upstream release of each provider CLI. It 
 every hour, and when the user selects `Check for updates` (`provider-runtime-releases.ts`): GitHub
 `releases/latest` for Codex, Pi, Kimi, GitHub Copilot, Mistral and Gemini (`google-antigravity/antigravity-cli`), the npm `latest` tag for Claude, OpenCode and Cline, `x.ai/cli/stable`
 for Grok, the `muse-stable` channel for Muse, Cognition's `cli/current` manifest for Devin, and the ACP registry entry `cursor` for Cursor. The version in `native-runtime.lock.json` is what a first install uses before a check has
-answered, and Bun, which is a tool runtime and not a provider, stays on it.
+answered, and Bun, which is a tool runtime and not a provider, stays on it. When the last check
+found no release for a provider that is not installed, `Download` and `Retry` look it up again,
+with the blocklist, for up to 10 seconds, before they use the pinned version. A vendor can remove an old build, as
+Cognition did for Devin CLI 3000.11.234 (#13549), so the pin alone can be a dead link.
 
 Every upstream download is checked against its source's own hash: the GitHub asset `digest` for
 Codex, Pi, Kimi, GitHub Copilot, Mistral and Gemini, the manifest `checksum` for Muse, the manifest `sha256` for Devin, and npm `dist.integrity` for Claude, OpenCode and Cline. x.ai and the ACP registry publish no hash,
@@ -406,8 +409,11 @@ file it installed, and every start verifies that record and the binary's `--vers
 install is used. The newest version in the store that verifies is the one that runs.
 
 `provider-runtime-blocklist.json` on `main` names versions no installation may offer. It stops a
-broken upstream release without an OpenBot release. It suppresses an offer only: it does not remove
-a version a user already installed. A list that cannot be read blocks nothing.
+broken upstream release without an OpenBot release. When the OpenBot copy of a provider runs a blocked
+version, the automatic update installs the version that the check offers, also when it is older, and then
+removes the blocked copy. Each update check also removes a blocked copy that is not active. A copy that
+another OpenBot process stamped in the retention time stays. A CLI that the user installed or configured stays. A list
+that cannot be read blocks nothing.
 
 The `Provider CLI canary` workflow (`.github/workflows/provider-cli-canary.yml`) finds a broken
 release before many users install it. Every six hours it reads the newest release of each provider

@@ -95,6 +95,7 @@ export const messages = {
   "error.team.routineFlowStopUnsupported": "Deze verbinding kan een routine-uitvoering niet stoppen.",
   "error.team.sidebarFoldersUnsupported": "Deze verbinding ondersteunt geen mappen in mappen.",
   "error.team.libraryFoldersUnsupported": "Deze verbinding ondersteunt geen bibliotheekmappen.",
+  "error.team.workflowFoldersUnsupported": "Deze verbinding ondersteunt geen workflowmappen.",
   "error.team.agentNotificationLevelsUnsupported":
     "Deze server kan geen eigen meldingsniveau per agent bewaren. Werk OpenBot bij op de computer waarop de server draait.",
   "error.team.sidebarPinsUnsupported":
@@ -203,6 +204,7 @@ export const messages = {
   "error.team.hostPersonalityUnsupported": "Deze verbinding ondersteunt de persoonlijkheid van de server niet.",
   "error.team.agentWaitsUnsupported": "Deze verbinding ondersteunt geen open wachtpunten.",
   "error.team.pendingApprovalUnsupported": "Deze verbinding kan geen volledige goedkeuring lezen.",
+  "error.team.pendingPromptsUnsupported": "Deze verbinding kan de open vragen niet lezen.",
   "error.team.phoneFeedbackUnsupported": "Deze verbinding kan geen rapport vanuit de telefoon-app sturen.",
   "error.team.messagePinsUnsupported": "Deze verbinding ondersteunt geen vastgemaakte berichten.",
   "error.team.queuedMessageThreadUnsupported":

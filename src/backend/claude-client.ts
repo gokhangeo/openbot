@@ -105,6 +105,7 @@ import {
 import { runCauseEffect } from "./effect-boundary";
 import { skillFolderNames } from "./home-skills";
 import { IdleThreadPool } from "./idle-thread-pool";
+import { MCP_STDIO_PROBE_TIMEOUT_MS } from "./mcp-probe";
 import {
   agentMcpServers,
   type ClaudeMcpServer,
@@ -205,6 +206,7 @@ const claudeFlagSettings = Effect.fn("claudeFlagSettings")(function* (
   cwd: string,
   sources: NonNullable<Options["settingSources"]>,
   processEnvironment: NodeJS.ProcessEnv,
+  excludedInstructionFiles: readonly string[],
 ) {
   const projectFiles = [
     ...(sources.includes("project") ? [join(cwd, ".claude", "settings.json")] : []),
@@ -230,6 +232,12 @@ const claudeFlagSettings = Effect.fn("claudeFlagSettings")(function* (
     ...CLAUDE_NAME_ONLY_SKILLS.map((skill): [string, "name-only"] => [skill, "name-only"]),
   ];
   const ownAttribution = ownSettings.some((file) => "attribution" in file || "includeCoAuthoredBy" in file);
+  const memoryExcludes = sources.includes("project")
+    ? [
+        ...(sources.includes("user") ? [] : claudeHomeMemoryFiles()),
+        ...claudeWorkspaceInstructionExcludes(cwd, excludedInstructionFiles),
+      ]
+    : [];
   const settings: Settings = {
     ...(ownAttribution ? {} : { attribution: { commit: "", pr: "" } }),
     disableRemoteControl: true,
@@ -237,7 +245,7 @@ const claudeFlagSettings = Effect.fn("claudeFlagSettings")(function* (
     ...(firstPartyApi && isClaudeAutoToolSearch(environmentValue("ENABLE_TOOL_SEARCH"))
       ? { env: { ENABLE_TOOL_SEARCH: "true" } }
       : {}),
-    ...(sources.includes("project") && !sources.includes("user") ? { claudeMdExcludes: claudeHomeMemoryFiles() } : {}),
+    ...(memoryExcludes.length > 0 ? { claudeMdExcludes: memoryExcludes } : {}),
   };
   return { settings, firstPartyApi };
 });
@@ -245,6 +253,12 @@ const claudeFlagSettings = Effect.fn("claudeFlagSettings")(function* (
 function claudeHomeMemoryFiles(): string[] {
   const userFolder = join(homedir(), ".claude");
   return [join(userFolder, "CLAUDE.md"), join(userFolder, "rules", "**")];
+}
+
+const CLAUDE_EXCLUDE_PATTERN_CHARACTERS = /[*?[\]{}()!]/g;
+
+function claudeWorkspaceInstructionExcludes(cwd: string, fileNames: readonly string[]): string[] {
+  return fileNames.map((fileName) => join(cwd, fileName).replace(CLAUDE_EXCLUDE_PATTERN_CHARACTERS, "?"));
 }
 
 const CLAUDE_OTHER_API_VARIABLES = [
@@ -326,6 +340,7 @@ interface ThreadConfig {
   channelTools: boolean;
   workspaceOnly: boolean;
   excludedFolders: string[];
+  excludedInstructionFiles: string[];
   agentId: string | null;
 }
 
@@ -402,7 +417,7 @@ interface ThreadRuntime {
 
 const CLAUDE_FAST_SERVICE_TIER = "fast";
 
-const AUTH_STATUS_TIMEOUT_MS = 5_000;
+const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 const CLAUDE_THREAD_IDLE_RELEASE_MS = 5 * 60_000;
 
@@ -1104,8 +1119,9 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
 
   readonly #readAccountEffect = Effect.fn("ClaudeAgentClient.readAccount")(function* (
     this: ClaudeAgentClient,
-    timeoutMs = AUTH_STATUS_TIMEOUT_MS,
+    requestTimeoutMs = 0,
   ): Effect.fn.Return<AccountReadResult, ProviderClientOperationError> {
+    const timeoutMs = Math.max(requestTimeoutMs, AUTH_STATUS_TIMEOUT_MS);
     let status = yield* this.#readAuthStatusEffect(false, timeoutMs);
     const onApiKey = status.loggedIn !== true && Boolean(this.#fallbackApiKey?.());
     if (onApiKey) status = yield* this.#readAuthStatusEffect(true, timeoutMs);
@@ -1343,7 +1359,14 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             (name) => !(signInSettings.env?.[name] ?? cliEnvironment[name]),
           ),
         }
-      : yield* claudeFlagSettings(userSettingsFile, configDirectory, config.cwd, settingSources, cliEnvironment);
+      : yield* claudeFlagSettings(
+          userSettingsFile,
+          configDirectory,
+          config.cwd,
+          settingSources,
+          cliEnvironment,
+          config.excludedInstructionFiles,
+        );
     const flagSettings: Settings = {
       ...openBotSettings,
       ...nodeOptionsSettings,
@@ -1429,6 +1452,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           mcpServers,
           env: {
             ...withClaudeClientLabels(cliEnvironment),
+            ...(handoff ? claudeMcpStartupEnvironment(cliEnvironment) : {}),
             ...(resume && cliEnvironment.MCP_CONNECTION_NONBLOCKING === undefined
               ? { MCP_CONNECTION_NONBLOCKING: "0" }
               : {}),
@@ -2046,7 +2070,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         const call = turn.toolCalls.get(toolCallId);
         if (!call) continue;
         turn.toolCalls.delete(toolCallId);
-        this.#emitToolCall(runtime, toolCallId, call.name, true, call.input, isError ? text : null);
+        this.#emitToolCall(
+          runtime,
+          toolCallId,
+          call.name,
+          true,
+          call.input,
+          isError ? text : null,
+          isError ? null : text,
+        );
         if (
           isError &&
           call.name === "Bash" &&
@@ -2222,6 +2254,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     completed: boolean,
     input?: unknown,
     failure: string | null = null,
+    output: string | null = null,
   ): void {
     const turn = runtime.activeTurn;
     if (!turn) return;
@@ -2251,7 +2284,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           type: "toolCall",
           name,
           status: completed ? (failure === null ? "completed" : "failed") : "in_progress",
-          ...(completed && failure ? { error: failureEnds(failure) } : {}),
+          ...(completed && failure ? { error: textEnds(failure) } : {}),
+          ...(completed && !failure && output ? { output: textEnds(output) } : {}),
           ...(name === "Skill" && isRecord(input) && typeof input.skill === "string"
             ? { skill: input.skill.slice(0, INPUT_LIMITS.identifier) }
             : {}),
@@ -2987,6 +3021,11 @@ function spawnClaudeProcessGroup(
   return child;
 }
 
+function claudeMcpStartupEnvironment(env: NodeJS.ProcessEnv): Record<string, string> {
+  if (env.MCP_TIMEOUT?.trim()) return {};
+  return { MCP_TIMEOUT: String(MCP_STDIO_PROBE_TIMEOUT_MS) };
+}
+
 function claudeEnvironment(cli: ClaudeCliInfo): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -3122,6 +3161,10 @@ function readThreadConfig(params: unknown): ThreadConfig {
       isRecord(params) && Array.isArray(params.excludedFolders)
         ? params.excludedFolders.filter((value): value is string => isString(value))
         : [],
+    excludedInstructionFiles:
+      isRecord(params) && Array.isArray(params.excludedInstructionFiles)
+        ? params.excludedInstructionFiles.filter((value): value is string => isString(value))
+        : [],
     agentId: mcpAgentParam(params),
   };
 }
@@ -3135,7 +3178,7 @@ function threadConfigKey(config: ThreadConfig, withModel: boolean): string {
   return JSON.stringify(Object.entries(fields).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
-function failureEnds(text: string): string {
+function textEnds(text: string): string {
   const half = Math.floor(INPUT_LIMITS.messageText / 2);
   return text.length <= INPUT_LIMITS.messageText ? text : `${text.slice(0, half)}\n…\n${text.slice(-half)}`;
 }

@@ -100,6 +100,7 @@ export const messages = {
   "error.team.routineFlowStopUnsupported": "Diese Verbindung kann keinen Routinelauf stoppen.",
   "error.team.sidebarFoldersUnsupported": "Diese Verbindung unterstützt keine Ordner in Ordnern.",
   "error.team.libraryFoldersUnsupported": "Diese Verbindung unterstützt keine Bibliotheksordner.",
+  "error.team.workflowFoldersUnsupported": "Diese Verbindung unterstützt keine Workflow-Ordner.",
   "error.team.agentNotificationLevelsUnsupported":
     "Dieser Server kann keine eigene Benachrichtigungsstufe pro Agent speichern. Aktualisiere OpenBot auf dem Computer, auf dem er läuft.",
   "error.team.sidebarPinsUnsupported":
@@ -205,6 +206,7 @@ export const messages = {
   "error.team.hostPersonalityUnsupported": "Diese Verbindung unterstützt die Server-Persönlichkeit nicht.",
   "error.team.agentWaitsUnsupported": "Offene Wartevorgänge werden von dieser Verbindung nicht unterstützt.",
   "error.team.pendingApprovalUnsupported": "Diese Verbindung kann keine vollständige Freigabe lesen.",
+  "error.team.pendingPromptsUnsupported": "Diese Verbindung kann die offenen Fragen nicht lesen.",
   "error.team.phoneFeedbackUnsupported": "Diese Verbindung kann keinen Bericht aus der Telefon-App senden.",
   "error.team.messagePinsUnsupported": "Diese Verbindung unterstützt angeheftete Nachrichten nicht.",
   "error.team.queuedMessageThreadUnsupported":

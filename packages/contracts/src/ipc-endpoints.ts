@@ -25,6 +25,7 @@ import type {
   AddedAgent,
   AgentAdminSettings,
   AgentBackupModelSettings,
+  AgentBuiltinMemorySettings,
   AgentDefaultsOverview,
   AgentFastModeSettings,
   AgentHostSettings,
@@ -33,6 +34,7 @@ import type {
   SetAgentDefaultChoiceInput,
   UpdateAgentAdminSettingsInput,
   UpdateAgentBackupModelsInput,
+  UpdateAgentBuiltinMemoryInput,
   UpdateAgentDefaultsInput,
   UpdateAgentFastModeInput,
   UpdateAgentHostSettingsInput,
@@ -88,7 +90,7 @@ import type {
   SaveAgentProfileInput,
   SaveAgentProfileResult,
 } from "./ipc-agent-profile";
-import type { AgentRuntimeSnapshot } from "./ipc-agent-runtime";
+import type { AgentRuntimePrompt, AgentRuntimeSnapshot } from "./ipc-agent-runtime";
 import type {
   AgentSessionSettings,
   ResetAgentSessionSettingInput,
@@ -114,6 +116,7 @@ import type {
   RemoveProviderAccountInput,
   RenameProviderAccountInput,
   ResetProviderUsageInput,
+  SetLiveVoiceAccountInput,
   SetProviderAccountPoolInput,
   SetProviderApiKeyInput,
   SubmitProviderAccountCodeLoginInput,
@@ -617,6 +620,7 @@ import type {
   VoiceTranscriptionInput,
   VoiceTranscriptionResult,
 } from "./ipc-voice";
+import type { WorkflowFolderAction, WorkflowFoldersSnapshot } from "./ipc-workflow-folders";
 import type {
   WorkflowGitHubCatalog,
   WorkflowGitHubHistory,
@@ -830,6 +834,7 @@ export const IPC_ENDPOINTS = {
     renameProviderAccount: request<RenameProviderAccountInput, AgentStatus>()("app:rename-provider-account"),
     removeProviderAccount: request<RemoveProviderAccountInput, AgentStatus>()("app:remove-provider-account"),
     setProviderAccountPool: request<SetProviderAccountPoolInput, AgentStatus>()("app:set-provider-account-pool"),
+    setLiveVoiceAccount: request<SetLiveVoiceAccountInput, AgentStatus>()("app:set-live-voice-account"),
     signOutProvider: request<AgentProviderId, AgentStatus>()("app:sign-out-provider"),
     providerUsageResets: request<AgentProviderId, ProviderUsageResets[]>()("app:provider-usage-resets"),
     resetProviderUsage: request<ResetProviderUsageInput, ProviderUsageResetOutcome>()("app:reset-provider-usage"),
@@ -1031,6 +1036,9 @@ export const IPC_ENDPOINTS = {
     renameAccount: scopedRequest<RenameProviderAccountInput, void, "required">()("provider-admin:rename-account"),
     removeAccount: scopedRequest<RemoveProviderAccountInput, void, "required">()("provider-admin:remove-account"),
     setAccountPool: scopedRequest<SetProviderAccountPoolInput, void, "required">()("provider-admin:set-account-pool"),
+    setLiveVoiceAccount: scopedRequest<SetLiveVoiceAccountInput, void, "required">()(
+      "provider-admin:set-live-voice-account",
+    ),
     usageResets: scopedRequest<AgentProviderId, ProviderUsageResets[], "required">()("provider-admin:usage-resets"),
     resetUsage: scopedRequest<ResetProviderUsageInput, ProviderUsageResetOutcome, "required">()(
       "provider-admin:reset-usage",
@@ -1435,6 +1443,7 @@ export const IPC_ENDPOINTS = {
     cancelScheduledRestart: request<undefined, UpdateStatus>()("update:cancel-scheduled-restart"),
     restartWhenIdle: request<IdleRestartTarget, UpdateStatus>()("update:restart-when-idle"),
     cancelIdleRestart: request<undefined, UpdateStatus>()("update:cancel-idle-restart"),
+    restartNow: request<undefined, UpdateStatus>()("update:restart-now"),
     event: event<UpdateStatus>()("update:event"),
     preference: event<UpdatePreference>()("update:preference-event"),
   },
@@ -1551,6 +1560,7 @@ export const IPC_ENDPOINTS = {
     respondToPrompt: scopedRequest<RespondToPromptInput, void>()("agent:respond-to-prompt"),
     respondToApproval: scopedRequest<RespondToApprovalInput, void>()("agent:respond-to-approval"),
     readPendingApproval: scopedRequest<ReadPendingApprovalInput, AgentApproval | null>()("agent:read-pending-approval"),
+    listPendingPrompts: scopedQuery<AgentRuntimePrompt[]>()("agent:list-pending-prompts"),
     respondToBrowserSecret: scopedRequest<LocalBrowserSecretResponse, void>()("agent:respond-to-browser-secret"),
     respondToBrowserTakeover: scopedRequest<RespondToBrowserTakeoverInput, void>()("agent:respond-to-browser-takeover"),
     scopedEvent: event<ScopedAgentEvent>()("agent:event"),
@@ -1632,6 +1642,8 @@ export const IPC_ENDPOINTS = {
     mediaCredits: scopedQuery<WorkflowMediaCredits>()("workflows:media-credits"),
     mediaCatalog: scopedQuery<WorkflowMediaCatalog>()("workflows:media-catalog"),
     mediaPrice: scopedRequest<WorkflowMediaPriceRequest, WorkflowMediaPrice>()("workflows:media-price"),
+    folders: scopedQuery<WorkflowFoldersSnapshot>()("workflows:folders"),
+    folderAction: scopedRequest<WorkflowFolderAction, WorkflowFoldersSnapshot>()("workflows:folder-action"),
   },
   crm: {
     overview: scopedQuery<CrmOverview>()("crm:overview"),
@@ -1786,6 +1798,10 @@ export const IPC_ENDPOINTS = {
     getAgentPlanCard: scopedRequest<string, AgentPlanCardSettings>()("agent:admin:get-plan-card"),
     updateAgentPlanCard: scopedRequest<UpdateAgentPlanCardInput, AgentPlanCardSettings>()(
       "agent:admin:update-plan-card",
+    ),
+    getAgentBuiltinMemory: scopedRequest<string, AgentBuiltinMemorySettings>()("agent:admin:get-builtin-memory"),
+    updateAgentBuiltinMemory: scopedRequest<UpdateAgentBuiltinMemoryInput, AgentBuiltinMemorySettings>()(
+      "agent:admin:update-builtin-memory",
     ),
     getAgentFastMode: scopedRequest<string, AgentFastModeSettings>()("agent:admin:get-fast-mode"),
     updateAgentFastMode: scopedRequest<UpdateAgentFastModeInput, AgentFastModeSettings>()(

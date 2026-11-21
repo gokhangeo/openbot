@@ -177,6 +177,7 @@ import {
 import { applyServerTimezone, SERVER_TIMEZONE_PREFERENCE_FILE } from "./server-timezone-preference-store";
 import { configureContentSecurityPolicy, configureRendererPermissions } from "./session-configuration";
 import { OWNER_PIN_KEY } from "./sidebar-pin-store";
+import { singleInstanceExitMessage, singleInstanceOwnerPid } from "./single-instance-owner";
 import { StartAttempts, takeForcedStartFailure } from "./start-attempts";
 import { compatiblePreviousRelease, readDatabaseSchemaVersion } from "./start-recovery-release";
 import { openStartRecoveryWindow, type StartRecovery } from "./start-recovery-window";
@@ -796,6 +797,7 @@ function registerIpcHandlers({
   computerUsePermissionHelp,
   storageUsage,
   libraryFoldersService,
+  workflowFoldersService,
   machineAlerts,
   trace,
   resourceMonitor,
@@ -971,7 +973,13 @@ function registerIpcHandlers({
     ...memoryIpcHandlers({ service, remoteServers }),
     ...sharedTableIpcHandlers({ service, remoteServers }),
     ...routineIpcHandlers({ service, remoteServers }),
-    ...workflowIpcHandlers({ workflows, events, github: workflowGitHub, remoteServers }),
+    ...workflowIpcHandlers({
+      workflows,
+      events,
+      github: workflowGitHub,
+      workflowFolders: workflowFoldersService,
+      remoteServers,
+    }),
     ...crmIpcHandlers({ crm, remoteServers }),
     ...routineResultIpcHandlers({ routineResults, remoteServers }),
     ...channelMemoryIpcHandlers({ service, remoteServers }),
@@ -1376,6 +1384,7 @@ app.on("continue-activity", (event, type, _userInfo, details) => {
 });
 
 if (!hasSingleInstanceLock) {
+  logger.warn(singleInstanceExitMessage(singleInstanceOwnerPid(app.getPath("userData"))));
   process.exit(0);
 } else {
   app.on("second-instance", (_event, argv) => {
@@ -1731,9 +1740,7 @@ if (!hasSingleInstanceLock) {
         }
       });
       interfaceSize.subscribe((preference) => {
-        windows.getMainWindow()?.webContents.setZoomFactor(interfaceSize.zoomFactor);
-        for (const chatWindow of windows.getChatWindows())
-          chatWindow.webContents.setZoomFactor(interfaceSize.zoomFactor);
+        windows.applyInterfaceSize(interfaceSize.zoomFactor);
         for (const window of BrowserWindow.getAllWindows()) {
           sendToRenderer(window, IPC_ENDPOINTS.app.appInterfaceSizePreference, preference);
         }

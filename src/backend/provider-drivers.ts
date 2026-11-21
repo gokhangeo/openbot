@@ -46,6 +46,7 @@ import { CodexAppServerClient } from "./app-server-client";
 import { ClaudeAgentClient } from "./claude-client";
 import {
   type AgentCliInfo,
+  ANTIGRAVITY_UPDATE_ENV,
   antigravityTakesStateFolders,
   COPILOT_ENV,
   cliPathEnvironment,
@@ -107,6 +108,7 @@ import {
   grokHomeDirectory,
   hermesHome,
   hermesStatePaths,
+  kimiCodeStatePaths,
   kimiStatePaths,
   mistralHomeDirectory,
   mistralStatePaths,
@@ -271,7 +273,7 @@ function antigravitySettingsUnreadable(appDataDir: string): boolean {
   }
 }
 
-const ANTIGRAVITY_ENV = { WSL_DISTRO_NAME: "OpenBot" };
+const ANTIGRAVITY_ENV = { WSL_DISTRO_NAME: "OpenBot", ...ANTIGRAVITY_UPDATE_ENV };
 
 const ANTIGRAVITY_APP_DATA = "antigravity-acp";
 
@@ -1076,7 +1078,15 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         argv: ["acp"],
         env: { ...KIMI_ENV },
         ...(confinement
-          ? { confine: (target) => confineWithState(target, confinement, kimiStatePaths, context.agentEnvironment?.()) }
+          ? {
+              confine: (target) =>
+                confineWithState(
+                  target,
+                  confinement,
+                  isPythonKimiCli(cli) ? kimiStatePaths : kimiCodeStatePaths,
+                  context.agentEnvironment?.(),
+                ),
+            }
           : {}),
         extraEnv: () => kimiProcessEnv(cli, context.agentEnvironment?.()),
         signInMessage: sourceText("error.provider.kimiSignIn"),

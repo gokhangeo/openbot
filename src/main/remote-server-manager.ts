@@ -67,7 +67,7 @@ import {
   type RemoteDesktopTestInput,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
-import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { TEAM_API_ROUTES, WORKSPACE_FILE_EXACT_PATH_QUERY } from "@openbot/contracts/team-api-routes";
 import { AGENT_COLORS_CAPABILITY, AGENT_COLORS_ROUTES } from "@openbot/contracts/team-protocol/agent-colors-v1";
 import { AGENT_IMPORT_ROUTES } from "@openbot/contracts/team-protocol/agent-import-v1";
 import {
@@ -80,6 +80,7 @@ import {
   AGENT_NOTIFICATION_LEVELS_ROUTES,
 } from "@openbot/contracts/team-protocol/agent-notification-levels-v1";
 import { AGENT_USAGE_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-usage-limit-v1";
+import { AGENT_WAITS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-waits-v1";
 import { ATTACHMENT_PREVIEW_CAPABILITY } from "@openbot/contracts/team-protocol/attachment-preview-v1";
 import { BROWSER_EGRESS_CAPABILITY } from "@openbot/contracts/team-protocol/browser-egress-v1";
 import { BROWSER_PROXIES_ROUTES } from "@openbot/contracts/team-protocol/browser-proxies-v1";
@@ -413,6 +414,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       },
       hasUsageLimits: (serverId) => this.supportsCapability(serverId, AGENT_USAGE_LIMIT_CAPABILITY),
       hasModelSources: (serverId) => this.supportsCapability(serverId, PROVIDER_MODEL_SOURCE_CAPABILITY),
+      hasAgentWaits: (serverId) => this.supportsCapability(serverId, AGENT_WAITS_CAPABILITY),
       emit: (serverId, event, bufferedLive) => {
         if (event.type === "agent-notification-levels-changed")
           this.#rememberLevels(serverId, { server: event.server, agents: event.agents });
@@ -2391,6 +2393,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       serverId = this.#store.activeServerId,
       preview = false,
       size?: number,
+      queued = preview,
     ): Effect.fn.Return<RemoteAttachment, RemoteWorkflowError, RemoteRequest> {
       const server = yield* remoteDecode(() => this.#store.require(serverId));
       const progress = size === undefined ? undefined : this.#attachmentProgress(server.id, attachmentId, size);
@@ -2421,6 +2424,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
             }).pipe((download) => (stoppable ? this.#stoppable(server.id, attachmentId, download) : download)),
           ),
         preview,
+        queued,
       );
       return yield* stoppable ? this.#stoppable(server.id, attachmentId, load) : load;
     },
@@ -2535,11 +2539,13 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       workspacePath: string,
       serverId = this.#store.activeServerId,
       maxBytes?: number,
+      exactPath = false,
     ): Effect.fn.Return<{ bytes: Uint8Array; name: string }, RemoteWorkflowError, RemoteRequest> {
       const server = yield* remoteDecode(() => this.#store.require(serverId));
       const url = new URL(TEAM_API_ROUTES.workspaceFiles, server.apiUrl);
       url.searchParams.set("botId", agentId);
       url.searchParams.set("path", workspacePath);
+      if (exactPath) url.searchParams.set(WORKSPACE_FILE_EXACT_PATH_QUERY, "1");
       const response = yield* this.#client.fetch(server, url);
       return {
         bytes: yield* remoteCall(() => fileResponseBytes(response, maxBytes)),

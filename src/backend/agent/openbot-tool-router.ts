@@ -55,6 +55,7 @@ import type {
 import {
   agentAccessRank,
   agentComputerUseEnabled,
+  agentMemoryEnabled,
   agentNewChatAllowed,
   agentPermissionLevel,
   agentQuickAcknowledgementEnabled,
@@ -112,7 +113,13 @@ import {
   setBackdropToolSchema,
   webSearchToolSchema,
 } from "../openbot-tools";
-import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
+import {
+  type AppServerRequest,
+  type DynamicToolCallParams,
+  type DynamicToolResult,
+  isRecord,
+  PROVIDER_STOPPED_WAITING,
+} from "../protocol";
 import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/routine-flow-tools";
 import type { StoredStateFailure } from "../stored-state-effects";
 import type { VaultItems } from "../vault-items";
@@ -218,7 +225,7 @@ import {
   type ScreenCaptureImage,
   type ScreenCaptureRequest,
 } from "./screen-capture";
-import { searchServerPlaces, searchSettingLinks, settingLinkSummary } from "./setting-links";
+import { searchChatPlaces, searchServerPlaces, searchSettingLinks, settingLinkSummary } from "./setting-links";
 import { type AgentSidebar, handleSidebarTool } from "./sidebar-tools";
 import { LOCAL_SKILL_TOOL_DEFINITIONS, type LocalSkillTools, runLocalSkillTool } from "./skill-tools";
 import { isDynamicToolCall } from "./thread-items";
@@ -268,6 +275,14 @@ function requestAborted(signal: AbortSignal | undefined) {
     return Effect.sync(() => signal?.removeEventListener("abort", abort));
   });
 }
+
+const AGENT_MEMORY_TOOLS: ReadonlySet<string> = new Set([
+  "search_memories",
+  "list_memories",
+  "set_memory_inclusion",
+  "remember",
+  "forget_memory",
+]);
 
 const LISTED_DESCRIPTION_LENGTH = 300;
 
@@ -609,9 +624,11 @@ export class OpenBotToolRouter {
     request: AppServerRequest,
   ) {
     if (request.signal?.aborted) return;
-    request.signal?.addEventListener("abort", () => this.#attention.cancelRequest(client, request.id), {
-      once: true,
-    });
+    request.signal?.addEventListener(
+      "abort",
+      () => this.#attention.cancelRequest(client, request.id, request.signal?.reason === PROVIDER_STOPPED_WAITING),
+      { once: true },
+    );
     const reportFailure = (error: unknown) =>
       Effect.sync(() => {
         if (client.running) {
@@ -1659,6 +1676,11 @@ export class OpenBotToolRouter {
     };
   }
 
+  #memoryEnabled(agentId: string): boolean {
+    const agent = this.#hooks.listAgents().find((candidate) => candidate.id === agentId);
+    return agent === undefined || agentMemoryEnabled(agent);
+  }
+
   #requireAgent(agentId: string): AgentSummary {
     const agents = this.#hooks.listAgents();
     const agent = agents.find((candidate) => candidate.id === agentId);
@@ -1904,7 +1926,7 @@ export class OpenBotToolRouter {
       return openBotToolResult({
         status: "posted",
         channel: { id: channel.id, name: channel.name },
-        next: "The channel members work on it in the channel. Tell the user to follow it there, and do not do the work here.",
+        next: "The channel members work on it in the channel, and each member that takes it sends its result back here in a later turn. Do not do the work here and do not wait: tell the user where it went, then end your turn.",
       });
     }
 
@@ -2267,6 +2289,10 @@ export class OpenBotToolRouter {
       );
     }
 
+    if (AGENT_MEMORY_TOOLS.has(params.tool) && !this.#memoryEnabled(senderAgentId))
+      return openBotToolFailure(
+        "OpenBot memory is off for you, so this tool does not work. Use a connected memory app instead, or tell the user that they can turn on OpenBot memory in your settings.",
+      );
     const memoryResult = this.#memories.handleTool(
       params,
       senderAgentId,
@@ -2363,13 +2389,15 @@ export class OpenBotToolRouter {
       if (!isSettingLinkId(setting)) {
         const matches = searchSettingLinks(setting);
         const serverPlaces = searchServerPlaces(setting);
-        const found = matches.length > 0 || serverPlaces.length > 0;
+        const chatPlaces = searchChatPlaces(setting);
+        const found = matches.length > 0 || serverPlaces.length > 0 || chatPlaces.length > 0;
         const apps =
           "An app in Marketplace, such as Telegram, Slack or Notion, is not a setting: for one, call suggest_marketplace_app with its id.";
         return openBotToolResult({
           status: found ? "matches" : "not_found",
           matches,
           ...(serverPlaces.length > 0 ? { serverPlaces } : {}),
+          ...(chatPlaces.length > 0 ? { chatPlaces } : {}),
           next: found
             ? [
                 matches.length > 0
@@ -2377,6 +2405,9 @@ export class OpenBotToolRouter {
                   : "",
                 serverPlaces.length > 0
                   ? "A server place has no id and no card: when it fits, give the user its steps in words, and say who can do it."
+                  : "",
+                chatPlaces.length > 0
+                  ? "A chat place is a feature of the chat itself, with no id and no card: when it fits, tell the user in words where it is and what it does."
                   : "",
                 apps,
                 "When none fits, try other English words once, then say that you found no setting for it.",

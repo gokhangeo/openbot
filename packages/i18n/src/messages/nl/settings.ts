@@ -30,6 +30,8 @@ export const messages = {
   "settings.movingFaces.title": "Bewegende agentgezichten",
   "settings.movingFaces.description":
     "Agentgezichten knipperen en bewegen. Staan eerst stil op een computer zonder GPU.",
+  "settings.startupAnimation.title": "Startanimatie",
+  "settings.startupAnimation.description": "Toon de agentanimatie terwijl OpenBot opent.",
   "settings.logoColor.title": "Logokleur",
   "settings.logoColor.description": "Te zien in het Dock, de taakbalk en het Dynamic Island.",
   "settings.logoColor.buildNote": "Deze build houdt een eigen logokleur. De keuze geldt voor de release-app.",
@@ -732,6 +734,10 @@ export const messages = {
   "settings.voice.talkKey.refused": "Voeg nog een toets toe",
   "settings.voice.talkKey.reset": "Herstellen",
   "settings.voice.live.signIn": "Meld je met je ChatGPT-account aan bij Codex om live spraak te gebruiken.",
+  "settings.voice.live.account": "Account",
+  "settings.voice.live.accountAutomatic": "Automatisch",
+  "settings.voice.live.accountDescription":
+    "Het ChatGPT-account dat live spraak gebruikt. Kies een account waarvan het abonnement spraak bevat.",
   "settings.transfer.title": "Verplaats deze server naar een andere computer",
   "settings.transfer.lede": "Je agents, hun vaardigheden, routines, herinneringen en bestanden gaan in één bestand.",
   "settings.transfer.flow.label": "Hoe een overdracht werkt",

@@ -7,9 +7,15 @@ import { classifyFailure } from "@openbot/telemetry";
 import { PanelResizer } from "@openbot/ui/components/PanelResizer";
 import { settingsPanelMaxWidth } from "@openbot/ui/components/SettingsPanel";
 import { BROWSER_NEW_TAB_URL } from "@openbot/ui/features/browser/browser-suggestions";
-import { SidePanelHeader, SidePanelLauncher, type SidePanelPane } from "@openbot/ui/features/conversation/SidePanel";
+import {
+  SidePanelHeader,
+  SidePanelLauncher,
+  type SidePanelPane,
+  type SidePanelPaneBadge,
+} from "@openbot/ui/features/conversation/SidePanel";
 import { SideQuestionPanel } from "@openbot/ui/features/conversation/SideQuestionPanel";
 import { SubagentPanel } from "@openbot/ui/features/conversation/Subagents";
+import { ThreadsPane } from "@openbot/ui/features/conversation/threads/ThreadsPane";
 import { VoicePill } from "@openbot/ui/features/conversation/VoicePill";
 import { McpSignInRelayDialog } from "@openbot/ui/features/settings/McpSignInPage";
 import { useText } from "@openbot/ui/text";
@@ -32,6 +38,7 @@ import { serverCanAdminister, serverCanManageMcp, serverSupportsCapability } fro
 import { codexLiveAccess } from "../speech/codex-live-access";
 import { speechPort } from "../speech/speech-port";
 import { cycleSpeechSpeed, speechSpeed } from "../speech/speech-speed";
+import { openedAttachmentUrl } from "./attachment-preview";
 import { ConversationSideThread } from "./ConversationSideThread";
 import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { htmlAttachmentPageHtml, htmlAttachmentPageUrl } from "./chat-visual-url";
@@ -221,6 +228,8 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
     openPanelThread,
     closePanelThread,
     movePanelThreadToChat,
+    moveThreadToPanel,
+    startNewThread,
     channel,
     replyJump,
   } = useConversationViewScope();
@@ -412,6 +421,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
   const sidePanelPanes = createMemo((): SidePanelPane[] => [
     ...(props.browserEnabled !== false && channelBrowserPane() ? (["browser"] as const) : []),
     ...(filesServer() && filesSource() ? (["files"] as const) : []),
+    ...(props.agent && !channel && props.threads ? (["threads"] as const) : []),
     ...(props.agent || channel ? (["settings"] as const) : []),
   ]);
   const panelSubagent = createMemo(() => {
@@ -499,6 +509,26 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
   );
   const sideThreadTabs = () => props.threads?.side.tabs ?? [];
   const moveSideThread = (id: string, index: number) => props.threads?.side.onMove(id, index);
+  const sideThreadIds = createMemo(() => sideThreadTabs().map((thread) => thread.id));
+  const listedThreads = createMemo(() => {
+    const header = props.threads?.header;
+    if (!header) return [];
+    return [...header.tabs.filter((thread) => thread.kind === "draft"), ...header.threads];
+  });
+  const sidePanelBadges = createMemo((): Partial<Record<SidePanelPane, SidePanelPaneBadge>> => {
+    const waiting = listedThreads().filter((thread) => thread.status.kind === "waiting").length;
+    return waiting > 0
+      ? { threads: { count: waiting, label: t("conversation.threads.waitingCount", { count: waiting }) } }
+      : {};
+  });
+  const openListedThread = (id: string) => {
+    if (sideThreadIds().includes(id)) movePanelThreadToChat(id);
+    else props.threads?.header.onOpen(id);
+  };
+  const toggleListedThreadBeside = (id: string) => {
+    if (sideThreadIds().includes(id)) movePanelThreadToChat(id);
+    else moveThreadToPanel(id);
+  };
   return (
     <>
       <HostFolderPicker request={folderPick()} browse={browsePickFolders} onDone={finishFolderPick} />
@@ -507,6 +537,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
           panes={sidePanel().panes}
           selected={selectedPane()}
           available={sidePanelPanes()}
+          badges={sidePanelBadges()}
           maximized={sidePanel().maximized}
           settingsLabel={channel ? t("channel.settings.title") : undefined}
           onSelect={openSidePanelPane}
@@ -544,6 +575,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
           {sidePanelResizer("side-panel-launcher")}
           <SidePanelLauncher
             available={sidePanelPanes()}
+            badges={sidePanelBadges()}
             settingsLabel={channel ? t("channel.settings.title") : undefined}
             onOpen={openSidePanelPane}
           />
@@ -571,7 +603,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
                 onOpenWorkspaceFile={previewWorkspaceAgentId() ? openWorkspaceFolderEntry : undefined}
                 onOpenWorkspaceFolder={openWorkspaceFolder}
                 onBack={sidebarFileBack() === null ? undefined : openSidebarFileBack}
-                sourceUrl={attached()?.previewUrl ?? null}
+                sourceUrl={openedAttachmentUrl(attached()?.previewUrl)}
                 pageUrl={htmlAttachmentPageUrl(attached()) ?? file().preview?.pageUrl}
                 pageHtml={props.runtime?.visualPage ? htmlAttachmentPageHtml(attached(), file().preview) : undefined}
                 fileKey={previewFileKey()}
@@ -659,6 +691,19 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
         {(threadId) => <ConversationSideThread threadId={threadId} resizer={sidePanelResizer("side-thread-panel")} />}
       </Show>
 
+      <Show when={activeRightPanel() === "threads" && sidePanelPanes().includes("threads")}>
+        <ThreadsPane
+          threads={listedThreads()}
+          activeId={props.threads?.header.activeId ?? ""}
+          besideIds={sideThreadIds()}
+          canStartNew={props.threads?.header.canStartNew ?? false}
+          resizer={sidePanelResizer("threads-panel")}
+          onOpen={openListedThread}
+          onToggleBeside={toggleListedThreadBeside}
+          onNew={startNewThread}
+        />
+      </Show>
+
       <Show when={activeRightPanel() === "subagent"}>
         <SubagentPanel
           subagent={panelSubagent()}
@@ -731,7 +776,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
               skillsMode={agentSkillsMode(props.server, props.runtime)}
               skillsServerId={props.server?.id}
               previewWorkspaceFile={(path) =>
-                conversationRuntime(props).agent.previewWorkspaceFile({ agentId: agent().id, path })
+                conversationRuntime(props).agent.previewWorkspaceFile({ agentId: agent().id, path, exactPath: true })
               }
               tablesVisible={
                 (!props.runtime || props.runtime.admin !== undefined) &&
@@ -748,6 +793,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
               busyMessageDefaultIsHost={props.server?.kind === "remote"}
               newChatEditable={props.server?.kind === "local" || props.remoteNewChatLoaded === true}
               quickAcknowledgementEditable={props.server?.kind === "local" || props.remotePlanCardLoaded === true}
+              builtinMemoryEditable={props.server?.kind === "local" || props.remoteBuiltinMemoryLoaded === true}
               fastMode={fastMode()}
               ultrafast={ultrafast()}
               onFastModeChange={fastModeChange()}

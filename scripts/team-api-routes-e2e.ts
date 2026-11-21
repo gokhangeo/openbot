@@ -19,6 +19,7 @@ import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits
 import {
   type AccountUsageLimit,
   AGENT_PROVIDERS,
+  AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT,
   type AgentEvent,
   type AgentModelId,
   type AgentModelOption,
@@ -31,6 +32,7 @@ import {
   type BitwardenConnectorStatus,
   type CentralAuthUser,
   CHANNEL_CHATS_CAPABILITY,
+  type ChannelMessage,
   type ChannelRoutine,
   type ConversationMessage,
   type CustomAgentResult,
@@ -81,7 +83,7 @@ import {
   withWhatsAppWorkingMessages,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
-import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { TEAM_API_ROUTES, WORKSPACE_FILE_EXACT_PATH_QUERY } from "@openbot/contracts/team-api-routes";
 import { TEAM_PROTOCOL_V1_WEBSOCKET } from "@openbot/contracts/team-protocol";
 import {
   AGENT_ACTIVE_QUEUE_DELIVERY_LIMIT,
@@ -92,6 +94,10 @@ import {
   AGENT_BACKUP_MODELS_CAPABILITY,
   AGENT_BACKUP_MODELS_ROUTES,
 } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
+import {
+  AGENT_BUILTIN_MEMORY_CAPABILITY,
+  AGENT_BUILTIN_MEMORY_ROUTES,
+} from "@openbot/contracts/team-protocol/agent-builtin-memory-v1";
 import { AGENT_COLORS_CAPABILITY, AGENT_COLORS_ROUTES } from "@openbot/contracts/team-protocol/agent-colors-v1";
 import { AGENT_DEFAULTS_CAPABILITY, AGENT_DEFAULTS_ROUTES } from "@openbot/contracts/team-protocol/agent-defaults-v1";
 import {
@@ -292,6 +298,11 @@ import {
   LIBRARY_FOLDERS_ROUTES,
 } from "@openbot/contracts/team-protocol/library-folders-v1";
 import {
+  decodeLiveVoiceAccount,
+  LIVE_VOICE_ACCOUNT_CAPABILITY,
+  LIVE_VOICE_ACCOUNT_ROUTES,
+} from "@openbot/contracts/team-protocol/live-voice-account-v1";
+import {
   LIVE_VOICE_CAPABILITY,
   LIVE_VOICE_ROUTES,
   type LiveVoiceEvent,
@@ -319,6 +330,10 @@ import {
   PENDING_APPROVAL_CAPABILITY,
   PENDING_APPROVAL_ROUTES,
 } from "@openbot/contracts/team-protocol/pending-approval-v1";
+import {
+  PENDING_PROMPTS_CAPABILITY,
+  PENDING_PROMPTS_ROUTES,
+} from "@openbot/contracts/team-protocol/pending-prompts-v1";
 import { PHONE_FEEDBACK_CAPABILITY, PHONE_FEEDBACK_ROUTES } from "@openbot/contracts/team-protocol/phone-feedback-v1";
 import {
   PROVIDER_ACCOUNT_CODE_CAPABILITY,
@@ -388,7 +403,11 @@ import {
 } from "@openbot/contracts/team-protocol/routine-run-place-v1";
 import { ROUTINES_ONCE_CAPABILITY, ROUTINES_ONCE_ROUTES } from "@openbot/contracts/team-protocol/routines-once-v1";
 import { SETTING_LINK_MARKERS_CAPABILITY } from "@openbot/contracts/team-protocol/setting-link-markers-v1";
-import { SIDE_QUESTION_CAPABILITY, SIDE_QUESTION_ROUTES } from "@openbot/contracts/team-protocol/side-question-v1";
+import {
+  SIDE_QUESTION_CAPABILITY,
+  SIDE_QUESTION_ROUTES,
+  SIDE_QUESTION_THREADS_CAPABILITY,
+} from "@openbot/contracts/team-protocol/side-question-v1";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { SIDEBAR_PINS_CAPABILITY, SIDEBAR_PINS_ROUTES } from "@openbot/contracts/team-protocol/sidebar-pins-v1";
 import { SKILL_LEARNING_CAPABILITY, SKILL_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/skill-learning-v1";
@@ -904,6 +923,7 @@ const REFUSED_ACCOUNT_KEY = "key_e2e_refused";
 const ACCOUNT_KEY = "key_e2e_accepted";
 
 let antigravityPool: ProviderAccountPool | undefined;
+let codexLiveVoiceAccount: string | null = null;
 let codeSignInAccount: string | null = null;
 let agentStatus: AgentStatus | null = null;
 let deleteFailure: string | null = null;
@@ -936,6 +956,7 @@ let hidden: HiddenAgentsSnapshot = { agents: [{ agentId: "agent-pi", hiddenAt: n
 
 const agentEventListeners = new Set<(event: AgentEvent, memberId?: string) => void>();
 let accessLevels: AgentAccessState = { revision: 0, everyone: {}, roles: [] };
+let largePendingPrompts = false;
 let importFreeBytes: number | null = null;
 const accessListeners = new Set<(serverId: string, state: AgentAccessState) => void>();
 const agentAccess: TeamApiAgentAccess = {
@@ -1287,9 +1308,9 @@ const fakeAgents: TeamApiAgents = {
         ? { path: workspacePath, name: "big.bin", size: ATTACHMENT_LIMITS.fileBytes + 1, insideWorkspace: true }
         : { path: workspacePath, name: "notes.md", size: readFileSync(workspacePath).length, insideWorkspace: true };
     }),
-  resolveLocalWorkspaceFile: (agentId, path) =>
+  resolveLocalWorkspaceFile: (agentId, path, options) =>
     Effect.sync(() => {
-      record("resolveLocalWorkspaceFile", agentId, path);
+      record("resolveLocalWorkspaceFile", agentId, path, options?.exactPath === true);
       return {
         path: workspacePath,
         name: "notes.md",
@@ -1612,6 +1633,39 @@ const fakeAgents: TeamApiAgents = {
     return Effect.void;
   },
   agentIdForRequest: (requestId) => (requestId === 7 ? "agent-ada" : undefined),
+  pendingPrompts: () => {
+    record("pendingPrompts");
+    if (largePendingPrompts)
+      return Array.from({ length: 300 }, (_, index) => ({
+        requestId: `prompt-large-${index}`,
+        agentId: "agent-ada",
+        threadId: `thread-large-${index}`,
+        turnId: `turn-large-${index}`,
+        questions: Array.from({ length: 32 }, (_, question) => ({
+          id: `question-${question}`,
+          header: "h".repeat(80),
+          question: "q".repeat(240),
+          isSecret: false,
+          options: null,
+        })),
+      }));
+    return [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        requestId: `prompt-ada-${index}`,
+        agentId: "agent-ada",
+        threadId: `thread-ada-${index}`,
+        turnId: `turn-ada-${index}`,
+        questions: [{ id: "color", header: "Color", question: "Pick a color", isSecret: false, options: null }],
+      })),
+      {
+        requestId: "prompt-gone",
+        agentId: "agent-gone",
+        threadId: "thread-gone",
+        turnId: "turn-gone",
+        questions: [{ id: "day", header: "Day", question: "Pick a day", isSecret: false, options: null }],
+      },
+    ];
+  },
   pendingApproval: (requestId) => {
     record("pendingApproval", requestId);
     if (requestId === 7)
@@ -2498,6 +2552,8 @@ try {
               if (input.quickAcknowledgement === null) delete target.quickAcknowledgement;
               else if (input.quickAcknowledgement !== undefined)
                 target.quickAcknowledgement = input.quickAcknowledgement;
+              if (input.memory === true) delete target.memory;
+              else if (input.memory === false) target.memory = false;
               if (input.fastMode !== undefined) {
                 target.fastMode = input.fastMode;
                 if (input.fastMode && input.ultrafast) target.ultrafast = true;
@@ -2844,6 +2900,13 @@ try {
             antigravityPool = enabled
               ? { leftOut: out, inUse: known.find((id) => !out.includes(id)) ?? null }
               : undefined;
+            return accountModelsStatus();
+          }),
+        liveVoiceAccount: () => codexLiveVoiceAccount,
+        setLiveVoiceAccount: (accountId) =>
+          Effect.sync(() => {
+            record("setLiveVoiceAccount", accountId);
+            codexLiveVoiceAccount = accountId;
             return accountModelsStatus();
           }),
         getProviderAccountUsage: unused("providerAccounts.getProviderAccountUsage"),
@@ -4271,6 +4334,71 @@ try {
   }
 
   {
+    const v10 = { capabilities: [LIVE_VOICE_CAPABILITY, LIVE_VOICE_ACCOUNT_CAPABILITY], protocol: TEAM_PROTOCOL_V10 };
+    const route = LIVE_VOICE_ACCOUNT_ROUTES;
+    const unsupported = await call("POST", route.settings, {
+      token: adaToken,
+      json: {},
+      capabilities: [LIVE_VOICE_CAPABILITY],
+      protocol: TEAM_PROTOCOL_V10,
+    });
+    check(
+      "the live voice account route without live-voice-account-v1 gets 400 providersUnsupported",
+      errorIs(unsupported, 400, sourceText("error.team.providersUnsupported")),
+      summary(unsupported),
+    );
+    const writes = callsOf("setLiveVoiceAccount").length;
+    const memberRead = await call("POST", route.settings, { token: bobToken, json: {}, ...v10 });
+    const memberUpdate = await call("POST", route.update, {
+      token: bobToken,
+      json: { accountId: ULTRA_ACCOUNT },
+      ...v10,
+    });
+    check(
+      "a member cannot read or change the live voice account, and the host writes nothing",
+      errorIs(memberRead, 403, sourceText("error.team.adminRequired")) &&
+        errorIs(memberUpdate, 403, sourceText("error.team.adminRequired")) &&
+        callsOf("setLiveVoiceAccount").length === writes,
+      [summary(memberRead), summary(memberUpdate)],
+    );
+    const automatic = await call("POST", route.settings, { token: adaToken, json: {}, ...v10 });
+    check(
+      "with no choice, the live voice account is automatic",
+      automatic.status === 200 && isDeepStrictEqual(automatic.body, { accountId: null }),
+      summary(automatic),
+    );
+    const badAccount = await call("POST", route.update, {
+      token: adaToken,
+      json: { accountId: "not-an-account" },
+      ...v10,
+    });
+    check(
+      "an account id that is not one gets 400, and the host writes nothing",
+      badAccount.status === 400 && callsOf("setLiveVoiceAccount").length === writes,
+      summary(badAccount),
+    );
+    const chosen = await call("POST", route.update, { token: adaToken, json: { accountId: ULTRA_ACCOUNT }, ...v10 });
+    const read = await call("POST", route.settings, { token: adaToken, json: {}, ...v10 });
+    check(
+      "an admin chooses the Codex account for live voice, and the client decodes it",
+      chosen.status === 200 &&
+        isDeepStrictEqual(callsOf("setLiveVoiceAccount").at(-1), [ULTRA_ACCOUNT]) &&
+        read.status === 200 &&
+        decodeLiveVoiceAccount(read.body) === ULTRA_ACCOUNT,
+      [summary(chosen), summary(read)],
+    );
+    const reset = await call("POST", route.update, { token: adaToken, json: { accountId: null }, ...v10 });
+    const cleared = await call("POST", route.settings, { token: adaToken, json: {}, ...v10 });
+    check(
+      "an admin sets the live voice account back to automatic",
+      reset.status === 200 &&
+        isDeepStrictEqual(callsOf("setLiveVoiceAccount").at(-1), [null]) &&
+        isDeepStrictEqual(cleared.body, { accountId: null }),
+      [summary(reset), summary(cleared)],
+    );
+  }
+
+  {
     const v9 = { capabilities: [PROVIDER_ACCOUNT_KEYS_CAPABILITY], protocol: TEAM_PROTOCOL_V9 };
     const connect = PROVIDER_ACCOUNT_KEYS_ROUTES.connect;
     const compatibility = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V9 });
@@ -5028,6 +5156,116 @@ try {
         errorIs(hiddenSet, 404, sourceText("error.team.agentNotFound")) &&
         callsOf("updateAgent").length === writes + 2,
       [summary(hiddenRead), summary(hiddenSet)],
+    );
+  }
+
+  {
+    const memoryCapabilities = [AGENT_HIDDEN_CAPABILITY, TEAM_QUEUE_EDIT_CAPABILITY, AGENT_BUILTIN_MEMORY_CAPABILITY];
+    const v10 = { capabilities: memoryCapabilities, protocol: TEAM_PROTOCOL_V10 };
+    const compatibility = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V10 });
+    const older = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V9 });
+    check(
+      "the host advertises agent-builtin-memory-v1 to a protocol 10 peer only",
+      list(field(compatibility.body, "capabilities")).includes(AGENT_BUILTIN_MEMORY_CAPABILITY) &&
+        older.status === 200 &&
+        !list(field(older.body, "capabilities")).includes(AGENT_BUILTIN_MEMORY_CAPABILITY),
+      [summary(compatibility), summary(older)],
+    );
+    const writes = callsOf("updateAgent").length;
+    const adminRead = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, {
+      token: adaToken,
+      json: { agentId: "agent-ada" },
+      ...v10,
+    });
+    check(
+      "an admin reads that OpenBot memory is on for an agent with no own value",
+      adminRead.status === 200 && isDeepStrictEqual(adminRead.body, { memory: true }),
+      summary(adminRead),
+    );
+    const unsupported = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, {
+      token: adaToken,
+      json: { agentId: "agent-ada" },
+      protocol: TEAM_PROTOCOL_V10,
+    });
+    check(
+      "the OpenBot memory routes without the capability get 400 agentSettingsUnsupported",
+      errorIs(unsupported, 400, sourceText("error.team.agentSettingsUnsupported")),
+      summary(unsupported),
+    );
+    const memberRead = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, {
+      token: bobToken,
+      json: { agentId: "agent-ada" },
+      ...v10,
+    });
+    const memberSet = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.update, {
+      token: bobToken,
+      json: { agentId: "agent-ada", memory: false },
+      ...v10,
+    });
+    check(
+      "a member cannot read or set OpenBot memory",
+      errorIs(memberRead, 403, sourceText("error.team.adminRequired")) &&
+        errorIs(memberSet, 403, sourceText("error.team.adminRequired")) &&
+        callsOf("updateAgent").length === writes,
+      [summary(memberRead), summary(memberSet)],
+    );
+    const notBoolean = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.update, {
+      token: adaToken,
+      json: { agentId: "agent-ada", memory: null },
+      ...v10,
+    });
+    check(
+      "the host refuses an OpenBot memory value that is not a boolean, and writes nothing",
+      notBoolean.status === 400 && callsOf("updateAgent").length === writes,
+      summary(notBoolean),
+    );
+    const adminOff = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.update, {
+      token: adaToken,
+      json: { agentId: "agent-ada", memory: false },
+      ...v10,
+    });
+    const readOff = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, {
+      token: adaToken,
+      json: { agentId: "agent-ada" },
+      ...v10,
+    });
+    check(
+      "an admin turns off OpenBot memory through the agent writer and reads it back",
+      adminOff.status === 200 &&
+        isDeepStrictEqual(adminOff.body, { memory: false }) &&
+        isDeepStrictEqual(readOff.body, { memory: false }) &&
+        isDeepStrictEqual(callsOf("updateAgent").at(-1), [{ agentId: "agent-ada", memory: false }]),
+      [summary(adminOff), summary(readOff)],
+    );
+    const adminOn = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.update, {
+      token: adaToken,
+      json: { agentId: "agent-ada", memory: true },
+      ...v10,
+    });
+    const missing = await call("POST", AGENT_BUILTIN_MEMORY_ROUTES.settings, {
+      token: adaToken,
+      json: { agentId: "agent-none" },
+      ...v10,
+    });
+    check(
+      "an admin turns OpenBot memory on again, and an unknown agent gets 404",
+      adminOn.status === 200 &&
+        isDeepStrictEqual(adminOn.body, { memory: true }) &&
+        errorIs(missing, 404, sourceText("error.team.agentNotFound")),
+      [summary(adminOn), summary(missing)],
+    );
+    const colorWrites = callsOf("updateAgentColor").length;
+    const profilePatch = await call("PATCH", TEAM_API_ROUTES.agent.one("agent-ada"), {
+      token: adaToken,
+      json: { memory: false },
+      ...v10,
+    });
+    check(
+      "the agent profile update refuses OpenBot memory and writes nothing",
+      profilePatch.status === 400 &&
+        callsOf("updateAgent").length === writes + 2 &&
+        callsOf("updateAgentColor").length === colorWrites,
+      summary(profilePatch),
     );
   }
 
@@ -8769,6 +9007,57 @@ try {
         pictures.store.get(channelId).imageUrl === field(visible.body, "imageUrl"),
       [summary(hidden), summary(hiddenRead), summary(visible), { status: visibleRead.status, body: visibleRead.type }],
     );
+
+    const alert = (id: string, author: ChannelMessage["author"]): ChannelMessage => ({
+      id,
+      channelId,
+      taskId: null,
+      author,
+      sequence: 0,
+      superseded: false,
+      message: {
+        id,
+        text: id,
+        author: author.kind === "member" ? "user" : "assistant",
+        createdAt: new Date(clock).toISOString(),
+        status: "completed",
+      },
+    });
+    const postAlert = (id: string, author: ChannelMessage["author"]) =>
+      pictures.store.commit(`alert:${id}`, {
+        channel: pictures.store.get(channelId),
+        messages: [alert(id, author)],
+        tasks: [],
+        assignments: [],
+      });
+    const alertMember = { kind: "member" as const, id: "member-alerts", name: "Alerts" };
+    postAlert("alert-first", alertMember);
+    postAlert("alert-second", alertMember);
+    const alertPage = await call("POST", CHANNEL_ROUTES.read, { ...use, json: { channelId } });
+    const heldSequence = field(alertPage.body, "throughSequence");
+    const deletedAlert = pictures.store.message(channelId, "alert-second");
+    if (deletedAlert) pictures.store.deleteMessage(pictures.store.get(channelId), deletedAlert);
+    const shownSequence = pictures.store.page(channelId).throughSequence;
+    const alertLogStart = logged.length;
+    const markRead = (throughSequence: unknown, operationId: string) =>
+      call("POST", CHANNEL_ROUTES.command, { ...use, json: { type: "read", operationId, channelId, throughSequence } });
+    const readAfterDelete = await markRead(heldSequence, "alert-read-after-delete");
+    const readPastHistory = await markRead(999, "alert-read-past-history");
+    postAlert("alert-third", { kind: "agent", id: "agent-ada", name: "Ada" });
+    const alertRow = list((await call("GET", CHANNEL_ROUTES.list, use)).body).find(
+      (row) => field(row, "id") === channelId,
+    );
+    check(
+      "a read through a deleted newest message and a read past the history both answer 200, and a later message stays unread",
+      typeof heldSequence === "number" &&
+        deletedAlert !== null &&
+        shownSequence < heldSequence &&
+        readAfterDelete.status === 200 &&
+        readPastHistory.status === 200 &&
+        field(alertRow, "unreadCount") === 1 &&
+        logged.slice(alertLogStart).every((line) => !line.includes("Team API request failed")),
+      [heldSequence, shownSequence, summary(readAfterDelete), summary(readPastHistory), field(alertRow, "unreadCount")],
+    );
   }
 
   {
@@ -11789,6 +12078,28 @@ try {
         ),
       [summary(first), summary(second)],
     );
+    const inThread = await call("POST", SIDE_QUESTION_ROUTES.ask, {
+      token: bobToken,
+      capabilities: [...sideCapabilities, SIDE_QUESTION_THREADS_CAPABILITY],
+      json: { agentId: "agent-ada", question: "What did this thread change?", earlier: [], taskId: "task-1" },
+    });
+    const badThread = await call("POST", SIDE_QUESTION_ROUTES.ask, {
+      token: bobToken,
+      capabilities: [...sideCapabilities, SIDE_QUESTION_THREADS_CAPABILITY],
+      json: { agentId: "agent-ada", question: "Which thread?", earlier: [], taskId: "" },
+    });
+    check(
+      "a side question in a side thread gives the host the thread's task id, and an empty task id gets 400",
+      inThread.status === 200 &&
+        callsOf("askSideQuestion").some((args) =>
+          isDeepStrictEqual(args, [
+            { agentId: "agent-ada", question: "What did this thread change?", earlier: [], taskId: "task-1" },
+          ]),
+        ) &&
+        badThread.status === 400 &&
+        callsOf("askSideQuestion").every((args) => !JSON.stringify(args).includes("Which thread?")),
+      [summary(inThread), summary(badThread)],
+    );
     const busy = await call("POST", SIDE_QUESTION_ROUTES.ask, {
       token: bobToken,
       capabilities: sideCapabilities,
@@ -12211,8 +12522,20 @@ try {
         ownerOutside.status === 200 &&
         ownerOutside.text === "# workspace notes\n" &&
         callsOf("resolveLocalWorkspaceFile").length === localReads + 1 &&
-        isDeepStrictEqual(callsOf("resolveLocalWorkspaceFile").at(-1), ["agent-ada", "~/Desktop/notes.md"]),
+        isDeepStrictEqual(callsOf("resolveLocalWorkspaceFile").at(-1), ["agent-ada", "~/Desktop/notes.md", false]),
       [summary(memberOutside), summary(ownerOutside), callsOf("resolveLocalWorkspaceFile")],
+    );
+    const skillPath = `.claude/skills/pdf/SKILL.md`;
+    const ownerExact = await call(
+      "GET",
+      `${TEAM_API_ROUTES.workspaceFiles}?${new URLSearchParams({ botId: "agent-ada", path: skillPath, [WORKSPACE_FILE_EXACT_PATH_QUERY]: "1" })}`,
+      { token: adaToken },
+    );
+    check(
+      "workspace files: exact=1 makes the owner read only the named path, with no file-history match",
+      ownerExact.status === 200 &&
+        isDeepStrictEqual(callsOf("resolveLocalWorkspaceFile").at(-1), ["agent-ada", skillPath, true]),
+      [summary(ownerExact), callsOf("resolveLocalWorkspaceFile").at(-1)],
     );
   }
 
@@ -12494,6 +12817,56 @@ try {
         errorIs(closed, 409, sourceText("error.backend.approvalInactive")) &&
         !JSON.stringify(otherAgent.body).includes("r".repeat(100)),
       [summary(otherAgent), summary(closed)],
+    );
+  }
+
+  {
+    const capabilities = [PENDING_PROMPTS_CAPABILITY];
+    const v10 = { capabilities, protocol: TEAM_PROTOCOL_V10 };
+    const compatibility = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V10 });
+    const older = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V9 });
+    check(
+      "the host advertises pending-prompts-v1 to a protocol 10 peer only",
+      list(field(compatibility.body, "capabilities")).includes(PENDING_PROMPTS_CAPABILITY) &&
+        !list(field(older.body, "capabilities")).includes(PENDING_PROMPTS_CAPABILITY),
+      summary(compatibility),
+    );
+    const unsupported = await call("POST", PENDING_PROMPTS_ROUTES.list, { token: bobToken, json: {} });
+    check(
+      "a list of the open questions without the capability is refused",
+      errorIs(unsupported, 400, sourceText("error.team.pendingPromptsUnsupported")) &&
+        callsOf("pendingPrompts").length === 0,
+      summary(unsupported),
+    );
+    const listed = await call("POST", PENDING_PROMPTS_ROUTES.list, { token: bobToken, ...v10, json: {} });
+    const prompts = list(field(listed.body, "prompts"));
+    check(
+      "a member reads every open question past the 4 items of a runtime snapshot, and no question of a missing agent",
+      listed.status === 200 &&
+        prompts.length === 5 &&
+        prompts.every((prompt) => field(prompt, "agentId") === "agent-ada") &&
+        field(prompts[4], "requestId") === "prompt-ada-4",
+      { status: listed.status, prompts: prompts.length },
+    );
+    largePendingPrompts = true;
+    const large = await call("POST", PENDING_PROMPTS_ROUTES.list, { token: bobToken, ...v10, json: {} });
+    largePendingPrompts = false;
+    const largeCount = list(field(large.body, "prompts")).length;
+    check(
+      "a list of large questions stops at the byte limit of a runtime snapshot",
+      large.status === 200 &&
+        largeCount > 0 &&
+        largeCount < 300 &&
+        Buffer.byteLength(JSON.stringify(large.body)) <= AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT + 64,
+      { status: large.status, prompts: largeCount },
+    );
+    accessLevels = { revision: 95, everyone: { "agent-ada": "none" }, roles: [] };
+    const blocked = await call("POST", PENDING_PROMPTS_ROUTES.list, { token: bobToken, ...v10, json: {} });
+    accessLevels = { revision: 96, everyone: {}, roles: [] };
+    check(
+      "a member with no access to an agent reads none of its questions",
+      blocked.status === 200 && list(field(blocked.body, "prompts")).length === 0,
+      summary(blocked),
     );
   }
 

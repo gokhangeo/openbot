@@ -106,6 +106,7 @@ import {
   getRecord,
   getString,
   isRecord,
+  PROVIDER_STOPPED_WAITING,
   type RequestId,
   type ResponseDecoder,
   type RpcError,
@@ -518,6 +519,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
   #privateAnswer: string[] | null = null;
   readonly #privatePromptLock = Semaphore.makeUnsafe(1);
   readonly #serverRequests = new PendingServerRequests((request) => this.emit("request", request));
+  readonly #openQuestionToolCalls = new Map<string, AbortController>();
   #initialized: Deferred.Deferred<void, ProviderClientOperationError> | null = null;
   #scope = Scope.makeUnsafe();
   #initialization: InitializeResponse | null = null;
@@ -2467,6 +2469,15 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         !turn.stopped
       )
         sent = yield* send();
+      if (
+        Result.isFailure(sent) &&
+        this.#flavor.staleSession?.(sent.failure.cause) &&
+        this.#closesSessions &&
+        this.#supportsSessionResume &&
+        thread.activeTurn === turn &&
+        !turn.stopped
+      )
+        sent = yield* this.#sendAfterStaleSession(thread, turn, params, send);
       let response = providerResult(sent);
       if (!thread.transport) this.#promptAnswered = true;
       while (providerResult(yield* Effect.result(this.#leaveOutFailedMcpServer(thread, turn, response, params))))
@@ -2689,7 +2700,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       turn.providerError !== null ||
       turn.sdkFailureAt !== null ||
       this.#flavor.sdkHarness?.answerIsFailure.test(turn.text) === true;
-    if (!this.#flavor.wakesAfterPromptEnds || !this.#steersByPrompt || turn.stopped || failed) return "";
+    if (!this.#flavor.wakesAfterPromptEnds || !this.#steersByPrompt || turn.stopped || turn.quietNoUpdate || failed)
+      return "";
     return [...turn.toolItems.values()]
       .filter(
         (item) =>
@@ -2838,6 +2850,40 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     yield* this.#configuration.applyConfig(thread, model, null, this.#models);
     yield* this.#applyTurnSettings(thread, params);
     this.#publishSessionSettings(thread);
+  });
+
+  readonly #sendAfterStaleSession = Effect.fn("AcpAgentClient.sendAfterStaleSession")(function* (
+    this: AcpAgentClient,
+    thread: AcpThread,
+    turn: AcpTurn,
+    params: unknown,
+    send: () => Effect.Effect<Result.Result<PromptResponse, ProviderClientOperationError>>,
+  ): Effect.fn.Return<Result.Result<PromptResponse, ProviderClientOperationError>> {
+    logger.warn("An ACP agent refused a prompt because its session changed on disk. OpenBot opens it again.", {
+      provider: this.provider,
+    });
+    yield* providerCall(() => this.#sessionConnection(thread).closeSession({ sessionId: thread.id })).pipe(
+      this.#backgroundTimeout("session/close"),
+      Effect.ignore,
+    );
+    const reopened = yield* Effect.result(
+      this.#resumeWithTurnSettings(thread, thread.restore, params).pipe(this.#backgroundTimeout("session/resume")),
+    );
+    if (thread.activeTurn !== turn || turn.stopped)
+      return Result.succeed({ stopReason: "cancelled" } satisfies PromptResponse);
+    if (Result.isSuccess(reopened)) {
+      const sent = yield* send();
+      if (Result.isSuccess(sent) || !this.#flavor.staleSession?.(sent.failure.cause)) return sent;
+    } else {
+      thread.needsResume = true;
+      logger.warn("OpenBot could not open again a session that changed on disk.", {
+        provider: this.provider,
+        reason: this.#redact(failureText(reopened.failure.cause)),
+      });
+    }
+    return Result.fail(
+      providerFailure(sourceText("error.provider.acpSessionStale", { provider: this.#providerName(thread) })),
+    );
   });
 
   readonly #discardLostTurns = Effect.fn("AcpAgentClient.discardLostTurns")(function* (
@@ -3137,6 +3183,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         turn.providerError = sourceText("error.provider.acpPlanUsedUp", { provider: this.#label });
         return;
       }
+      if (this.#flavor.connectionLostChunk?.test(update.content.text)) {
+        turn.receivedOutput = true;
+        turn.failureCause = "network";
+        turn.providerError = sourceText("error.provider.acpServerLost", { provider: this.#label });
+        return;
+      }
       const quota = this.#flavor.sdkHarness?.quota(update.content.text) ?? null;
       if (quota !== null) {
         turn.receivedOutput = true;
@@ -3160,6 +3212,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         this.#appendThought(thread, turn, error);
         this.#completeThought(thread, turn);
         return;
+      }
+      if (turn.failureCause === "network" && update.content.text.trim()) {
+        turn.failureCause = null;
+        turn.providerError = null;
       }
       if (update.content.text) this.#completeThought(thread, turn);
       const messageId = contentMessageId(update);
@@ -3275,6 +3331,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         },
       });
       if (reported === "completed" || reported === "failed") {
+        if (!turn.stopped)
+          this.#openQuestionToolCalls
+            .get(questionToolCallKey(thread.id, update.toolCallId))
+            ?.abort(PROVIDER_STOPPED_WAITING);
         turn.messages.push(shown);
         turn.toolItems.delete(update.toolCallId);
         turn.mediaKinds.delete(update.toolCallId);
@@ -4146,16 +4206,36 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
             question: getString(question, "question") ?? "",
           }))
       : null;
+    const toolCallId = isOwn ? getString(params, "toolCallId") : null;
+    const questionCall = sessionId && toolCallId ? questionToolCallKey(sessionId, toolCallId) : null;
+    const stoppedWaiting = new AbortController();
+    if (questionCall) this.#openQuestionToolCalls.set(questionCall, stoppedWaiting);
     const result = yield* this.#waitForUser(
       thread?.activeTurn,
-      this.#serverRequests.call("item/tool/requestUserInput", {
-        ...params,
-        ...(asked ? { questions: asked } : {}),
-        threadId: sessionId,
-        turnId: thread?.activeTurn?.id ?? randomUUID(),
-        sourceMethod: method,
-      }),
-    ).pipe(toProviderClientOperationError);
+      this.#serverRequests.call(
+        "item/tool/requestUserInput",
+        {
+          ...params,
+          ...(asked ? { questions: asked } : {}),
+          threadId: sessionId,
+          turnId: thread?.activeTurn?.id ?? randomUUID(),
+          sourceMethod: method,
+        },
+        stoppedWaiting.signal,
+      ),
+    ).pipe(
+      toProviderClientOperationError,
+      Effect.catchIf(
+        () => stoppedWaiting.signal.aborted,
+        () => Effect.succeed({}),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (questionCall && this.#openQuestionToolCalls.get(questionCall) === stoppedWaiting)
+            this.#openQuestionToolCalls.delete(questionCall);
+        }),
+      ),
+    );
     return yield* providerSync(() => {
       if (!(own && asked)) return isRecord(result) ? result : {};
       const answers = getRecord(result, "answers") ?? {};
@@ -4317,6 +4397,10 @@ function printableInput(value: unknown): string | null {
 }
 
 type AcpToolCallUpdate = Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>;
+
+function questionToolCallKey(sessionId: string, toolCallId: string): string {
+  return JSON.stringify([sessionId, toolCallId]);
+}
 
 function toolCallPaths(
   call: { readonly locations?: readonly { readonly path: string }[] | null; readonly rawInput?: unknown },

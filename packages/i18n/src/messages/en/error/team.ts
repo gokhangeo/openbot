@@ -90,6 +90,7 @@ export const messages = defineMessages("error.team", {
   "error.team.routineFlowStopUnsupported": "This connection cannot stop a routine run.",
   "error.team.sidebarFoldersUnsupported": "Folders in folders are not supported by this connection.",
   "error.team.libraryFoldersUnsupported": "Library folders are not supported by this connection.",
+  "error.team.workflowFoldersUnsupported": "Workflow folders are not supported by this connection.",
   "error.team.agentNotificationLevelsUnsupported":
     "This server cannot keep your own notification level for each agent. Update OpenBot on the computer that runs it.",
   "error.team.sidebarPinsUnsupported":
@@ -195,6 +196,7 @@ export const messages = defineMessages("error.team", {
   "error.team.hostPersonalityUnsupported": "The server personality is not supported by this connection.",
   "error.team.agentWaitsUnsupported": "Open waits are not supported by this connection.",
   "error.team.pendingApprovalUnsupported": "Reading a whole approval is not supported by this connection.",
+  "error.team.pendingPromptsUnsupported": "Reading the open questions is not supported by this connection.",
   "error.team.phoneFeedbackUnsupported": "Sending a report from the phone app is not supported by this connection.",
   "error.team.messagePinsUnsupported": "Pinned messages are not supported by this connection.",
   "error.team.queuedMessageThreadUnsupported":
