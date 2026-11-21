@@ -232,6 +232,13 @@ function AuthenticatedStack() {
         return;
       }
       const { agentId } = target;
+      let chatShown = chatOpened;
+      // Reis eklentisi: ana sohbet bildiriminde sohbeti beklemeden açar; kanal/alt dizi listeye göre yönlendirilir.
+      if (!knownSideThread(target, targetSources) && !chatOpened)
+        whenUnlocked(() => {
+          chatShown = true;
+          showChat(agentId);
+        });
       void outsideDestination(target, targetSources).then((destination) => {
         if (outsideOpens.current !== order) return;
         if (chatOpened && !showsChat(agentId)) return;
@@ -249,12 +256,6 @@ function AuthenticatedStack() {
           whenUnlocked(() => showThread(known));
           return;
         }
-        let chatShown = chatOpened;
-        if (!chatOpened)
-          whenUnlocked(() => {
-            chatShown = true;
-            showChat(agentId);
-          });
         void sideThreadDestination(target, targetSources, THREAD_LOOKUP_MS).then((thread) => {
           if (!thread || outsideOpens.current !== order) return;
           whenUnlocked(() => {
