@@ -7,7 +7,9 @@ public class ReisAramaModule: Module {
   private var provider: CXProvider?
   private var controller: CXCallController?
   private var currentCall: UUID?
+  private var currentCallId: String?
   private var startedAt: Date?
+  private lazy var temsilci = ReisAramaTemsilci(sahip: self)
 
   public func definition() -> ModuleDefinition {
     Name("ReisArama")
@@ -16,6 +18,7 @@ public class ReisAramaModule: Module {
 
     AsyncFunction("startCall") { (callId: String, handle: String, displayName: String) async -> Bool in
       await MainActor.run { self.baslat(callId: callId, handle: handle, displayName: displayName) }
+      return true
     }
 
     AsyncFunction("endCall") { (callId: String) async in
@@ -27,6 +30,7 @@ public class ReisAramaModule: Module {
   private func baslat(callId: String, handle: String, displayName: String) {
     let uuid = UUID(uuidString: callId) ?? UUID()
     currentCall = uuid
+    currentCallId = callId
     startedAt = Date()
 
     if provider == nil {
@@ -36,7 +40,7 @@ public class ReisAramaModule: Module {
       yapilandirma.maximumCallsPerCallGroup = 1
       yapilandirma.supportedHandleTypes = [.generic]
       let p = CXProvider(configuration: yapilandirma)
-      p.setDelegate(self, queue: nil)
+      p.setDelegate(temsilci, queue: nil)
       provider = p
       controller = CXCallController()
     }
@@ -68,15 +72,21 @@ public class ReisAramaModule: Module {
   @MainActor
   fileprivate func cagriBitti(uuid: UUID) {
     let sure = startedAt.map { Date().timeIntervalSince($0) } ?? 0
+    let kimlik = uuid == currentCall ? (currentCallId ?? uuid.uuidString) : uuid.uuidString
     if uuid == currentCall {
       currentCall = nil
+      currentCallId = nil
       startedAt = nil
     }
-    sendEvent("onCallEnded", ["callId": uuid.uuidString, "duration": sure])
+    sendEvent("onCallEnded", ["callId": kimlik, "duration": sure])
   }
 }
 
-extension ReisAramaModule: CXProviderDelegate {
+/// CXProviderDelegate NSObject ister; Expo Module NSObject olmadığı için ayrı temsilci.
+final class ReisAramaTemsilci: NSObject, CXProviderDelegate {
+  private weak var sahip: ReisAramaModule?
+  init(sahip: ReisAramaModule) { self.sahip = sahip }
+
   public func providerDidReset(_ provider: CXProvider) {}
 
   public func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
@@ -94,8 +104,9 @@ extension ReisAramaModule: CXProviderDelegate {
 
   public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
     action.fulfill()
-    Task { @MainActor in
-      self.cagriBitti(uuid: action.callUUID)
+    let kimlik = action.callUUID
+    Task { @MainActor [weak sahip] in
+      sahip?.cagriBitti(uuid: kimlik)
     }
   }
 

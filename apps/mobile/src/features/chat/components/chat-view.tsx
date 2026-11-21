@@ -692,21 +692,35 @@ export function ChatView({
     caption: liveCaption,
   } = live;
   const voiceName = voiceAgent?.name ?? target.name;
+  const callIdRef = useRef<string | null>(null);
   const handleCall = useCallback(() => {
     if (target.kind !== "agent") return;
     const callId = `${target.id}-${Date.now()}`;
     if (reisArama) {
+      callIdRef.current = callId;
       void reisArama.startCall(callId, target.id, target.name).catch(() => {});
       const subscription = reisArama.addListener("onCallEnded", (event: any) => {
         if (event?.callId !== callId) return;
-        liveEnd();
         subscription.remove();
+        if (callIdRef.current !== callId) return;
+        callIdRef.current = null;
+        liveEnd();
       });
     }
     liveStart();
   }, [target, liveStart, liveEnd]);
+  // Reis: canlı ses uygulamadan kapanınca CallKit aramasını da bitir.
   useEffect(() => {
-    if (autoCall) handleCall();
+    if (liveOpen || !callIdRef.current) return;
+    const callId = callIdRef.current;
+    callIdRef.current = null;
+    reisArama?.endCall(callId);
+  }, [liveOpen]);
+  const autoCalled = useRef(false);
+  useEffect(() => {
+    if (!autoCall || autoCalled.current) return;
+    autoCalled.current = true;
+    handleCall();
   }, [autoCall, handleCall]);
   const liveVoiceMissing = voiceMissing && (conversation !== null || liveChannel !== null);
   const composerVoice = useMemo((): ComposerVoice | undefined => {
