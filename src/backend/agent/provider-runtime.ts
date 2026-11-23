@@ -2,8 +2,10 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename } from "node:path";
+import { RequestError } from "@agentclientprotocol/sdk";
 import type {
   AccountUsage,
+  AccountUsageLimit,
   AgentEvent,
   AgentModelId,
   AgentModelOption,
@@ -41,7 +43,7 @@ import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { classifyFailure } from "@openbot/telemetry";
 import { classifyUserError } from "@openbot/user-errors";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope, Semaphore } from "effect";
-import { isOpenCodeInternalFailure, OPENCODE_INTERNAL_FAILURE } from "./../acp-flavor-opencode";
+import { isOpenCodeInternalFailure, isOpenCodeStarting, OPENCODE_INTERNAL_FAILURE } from "./../acp-flavor-opencode";
 import { devinSignInPageRelayed, googleSignInByOpenBot, startAcpAuthentication } from "./../acp-sign-in";
 import {
   type AgentClient,
@@ -100,6 +102,7 @@ import { captureBrowser, signInPageByOpenBot } from "./browser-capture";
 import { CliCodeLoginFailed, type CliCodePrompt, PROMPT_TIMEOUT_MS, startCliCodeLogin } from "./cli-code-login";
 import { CliLoginFailed, CliLoginFlow, toCliLoginFailed } from "./cli-login-flow";
 import { CodexLoginFlow, toCodexLoginFailed } from "./codex-login";
+import { readCodexRoutesToOpenai } from "./codex-model-source";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { FailureContext } from "./failure-signal";
 import { ModelCatalog } from "./model-catalog";
@@ -340,6 +343,7 @@ export class ProviderRuntime implements ProviderPort {
   readonly #usageLimitRefreshes = new WeakSet<AgentClient>();
   readonly #mcpHandoff: McpHandoffLog;
   readonly #redactMcp: (text: string) => string;
+  readonly #reportMcpSignIn: ((provider: AgentProvider, server: string, signInText: string) => void) | null;
   readonly #configRevisions = new WeakMap<AgentClient, number>();
   readonly #cli = new Map<AgentProvider, AgentCliInfo>();
   readonly #cliSources = new Map<AgentProvider, Pick<AgentCliInfo, "source" | "incomplete">>();
@@ -375,7 +379,10 @@ export class ProviderRuntime implements ProviderPort {
   readonly #resetCredits = new WeakMap<AgentClient, number | null>();
   readonly #ownResetCredits = new Map<AgentProvider, number | null>();
   readonly #creditsAvailable = new WeakMap<AgentClient, boolean>();
+  readonly #codexRoutesToOpenai = new WeakMap<AgentClient, boolean>();
   readonly #usageUnreported = new Set<AgentProvider>();
+  readonly #usageReadFailed = new Set<AgentProvider>();
+  readonly #usageForgets = new Map<AgentProvider, number>();
   readonly #usageGates = new Map<AgentProvider, UsageReadGate>();
   readonly #releasedUsage = new Map<string, { gate: UsageReadGate; usage: AccountUsage }>();
   readonly #customAgentUsage = new Map<string, { prompt: string; text: string | null; readAt: number }>();
@@ -432,6 +439,7 @@ export class ProviderRuntime implements ProviderPort {
     credentials: ProviderClientContext;
     mcpHandoff?: McpHandoffLog;
     redactMcp: (text: string) => string;
+    reportMcpSignIn?: (provider: AgentProvider, server: string, signInText: string) => void;
     accounts?: ProviderAccountStore;
   }) {
     this.#off = new Set(options.offProviders);
@@ -451,6 +459,7 @@ export class ProviderRuntime implements ProviderPort {
     this.#credentials = options.credentials;
     this.#mcpHandoff = options.mcpHandoff ?? new McpHandoffLog();
     this.#redactMcp = options.redactMcp;
+    this.#reportMcpSignIn = options.reportMcpSignIn ?? null;
     this.#codexLogin = new CodexLoginFlow({
       bundledExecutable: () => this.#bundledExecutables.codex,
       installedChosen: () => this.#installedChosen.has("codex") || this.#installedFallback.has("codex"),
@@ -550,8 +559,14 @@ export class ProviderRuntime implements ProviderPort {
             this.#refreshUsage(client, model, false).pipe(
               Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })),
             ),
-          readModels: (client) =>
-            this.#modelCatalog.read(client, requireProviderDriver(client.provider).catalog).pipe(
+          readModels: (client) => {
+            const catalog = requireProviderDriver(client.provider).catalog;
+            return this.#modelCatalog.read(client, catalog).pipe(
+              Effect.catch((failure) =>
+                isProviderTimeout(failure.cause) && !catalog?.slowList
+                  ? this.#modelCatalog.read(client, catalog, this.#requestTimeoutMs)
+                  : Effect.fail(failure),
+              ),
               Effect.map(({ models }) => models),
               Effect.catch((failure) =>
                 Effect.sync(() => {
@@ -562,7 +577,8 @@ export class ProviderRuntime implements ProviderPort {
                   return null;
                 }),
               ),
-            ),
+            );
+          },
           resetCredits: (client) => this.#resetCredits.get(client),
           consumeUsageReset: (client) =>
             this.#consumeUsageReset(client).pipe(
@@ -995,7 +1011,9 @@ export class ProviderRuntime implements ProviderPort {
       const collected = new Map<string, AccountUsage["limits"][number]>();
       const logFailure = (provider: AgentProvider) => this.#logUsageFailure(provider);
       const keptReading = (provider: AgentProvider) =>
-        this.#usageUnreported.has(provider) ? null : (this.#lastUsage.get(provider) ?? null);
+        this.#usageUnreported.has(provider)
+          ? null
+          : (this.#lastUsage.get(provider) ?? (this.#usageReadFailed.has(provider) ? readFailedLimit(provider) : null));
       const readOwn = (provider: AgentProvider) =>
         Effect.gen({ self: this }, function* () {
           let usage: AccountUsage;
@@ -1049,6 +1067,7 @@ export class ProviderRuntime implements ProviderPort {
           const limit = usage.limits[0];
           if (!limit || (!limit.primary && !limit.secondary)) {
             this.#usageUnreported.add(provider);
+            this.#usageReadFailed.delete(provider);
             return null;
           }
           this.#keepUsage(provider, usage);
@@ -1056,6 +1075,7 @@ export class ProviderRuntime implements ProviderPort {
         });
       const readDefault = (provider: AgentProvider) =>
         Effect.gen({ self: this }, function* () {
+          const forgets = this.#usageForgets.get(provider) ?? 0;
           const limit = yield* this.#usageGate(provider)
             .run({
               read: readOwn(provider),
@@ -1067,7 +1087,13 @@ export class ProviderRuntime implements ProviderPort {
             })
             .pipe(
               Effect.catch((error) =>
-                Effect.fail(error).pipe(this.#logUsageFailure(provider), Effect.as(keptReading(provider))),
+                Effect.fail(error).pipe(
+                  this.#logUsageFailure(provider),
+                  Effect.map(() => {
+                    this.#noteUsageReadFailure(provider, error, forgets);
+                    return keptReading(provider);
+                  }),
+                ),
               ),
             );
           if (!limit) return;
@@ -1341,12 +1367,21 @@ export class ProviderRuntime implements ProviderPort {
     const limit = usage.limits[0];
     if (!limit || (!limit.primary && !limit.secondary)) return;
     this.#usageUnreported.delete(provider);
+    this.#usageReadFailed.delete(provider);
     this.#lastUsage.set(provider, { ...limit, id: provider });
+  }
+
+  #noteUsageReadFailure(provider: AgentProvider, error: { readonly cause: unknown }, forgets: number): void {
+    if ((this.#usageForgets.get(provider) ?? 0) !== forgets) return;
+    if (usageReadRefused(error)) this.#usageReadFailed.delete(provider);
+    else this.#usageReadFailed.add(provider);
   }
 
   #forgetUsage(provider: AgentProvider): void {
     this.#usageGate(provider).reset();
     this.#lastUsage.delete(provider);
+    this.#usageReadFailed.delete(provider);
+    this.#usageForgets.set(provider, (this.#usageForgets.get(provider) ?? 0) + 1);
     this.#ownResetCredits.delete(provider);
     for (const key of [...this.#releasedUsage.keys()])
       if (key.startsWith(releasedUsageKey(provider, ""))) this.#releasedUsage.delete(key);
@@ -1828,6 +1863,11 @@ export class ProviderRuntime implements ProviderPort {
     return this.#providerAccounts?.liveVoiceAccount() ?? null;
   }
 
+  codexPlanAccountInPlaceOfKey(): string | undefined {
+    if (this.#accounts.get("codex")?.type !== "apiKey") return undefined;
+    return this.#providerAccounts?.planAccounts("codex")[0];
+  }
+
   otherCodexAccounts(inUse: string): boolean {
     const ownSignIn =
       this.status().providers?.find((row) => row.id === "codex")?.state === "available" &&
@@ -2093,6 +2133,7 @@ export class ProviderRuntime implements ProviderPort {
               env,
               timeoutMs: command.timeoutMs,
               ...(command.closeInput ? { closeInput: true } : {}),
+              ...(command.pipedInput ? { pipedInput: true } : {}),
               ...(command.savedSignIn ? { savedSignIn: command.savedSignIn(cli, { ...process.env, ...env }) } : {}),
             });
           }),
@@ -2434,8 +2475,11 @@ export class ProviderRuntime implements ProviderPort {
             );
         }).pipe(
           Effect.mapError((error) => {
-            if (previousExecutable === undefined) delete this.#bundledExecutables[provider];
-            else this.#bundledExecutables[provider] = previousExecutable;
+            const installedIsOnlyCopy = installed && firstInstall;
+            if (!installedIsOnlyCopy) {
+              if (previousExecutable === undefined) delete this.#bundledExecutables[provider];
+              else this.#bundledExecutables[provider] = previousExecutable;
+            }
             const cause = error.cause;
             const failure = new Error(
               sourceText("error.provider.cliUpdateFailed", {
@@ -2865,7 +2909,7 @@ export class ProviderRuntime implements ProviderPort {
 
   applyPushedUsage(source: AgentClient, params: unknown): void {
     const provider = source.provider;
-    if (this.#clients.get(provider) !== source) return;
+    if (this.#clients.get(provider) !== source || this.#codexRoutesToOpenai.get(source) === false) return;
     const pushed = pushedUsageLimit(provider, params);
     if (!pushed) return;
     const kept = this.#lastUsage.get(provider);
@@ -2877,11 +2921,15 @@ export class ProviderRuntime implements ProviderPort {
       ...(pushed.creditsAvailable === undefined ? {} : { creditsAvailable: pushed.creditsAvailable }),
     };
     this.#usageUnreported.delete(provider);
+    this.#usageReadFailed.delete(provider);
     this.#lastUsage.set(provider, limit);
     this.#noteCredits(source, limit);
-    const limits = [...this.#lastUsage]
-      .filter(([item]) => !this.#usageUnreported.has(item) && (this.#clients.has(item) || this.#released.has(item)))
-      .map(([, item]) => item);
+    const shown = (item: AgentProvider) =>
+      !this.#usageUnreported.has(item) && (this.#clients.has(item) || this.#released.has(item));
+    const limits = [
+      ...[...this.#lastUsage].filter(([item]) => shown(item)).map(([, item]) => item),
+      ...[...this.#usageReadFailed].filter((item) => !this.#lastUsage.has(item) && shown(item)).map(readFailedLimit),
+    ];
     this.#emit({ type: "usage-changed", usage: structuredClone({ limits }) });
   }
 
@@ -3435,7 +3483,12 @@ export class ProviderRuntime implements ProviderPort {
       const status = this.status().providers?.find((row) => row.id === provider);
       if (status?.message === sourceText("error.provider.codexStateBusy")) return;
       if (status?.message === sourceText("error.provider.realtimeLimitZero")) return;
-      if (status?.message === OPENCODE_INTERNAL_FAILURE && this.#restartTimers.has(provider)) return;
+      if (
+        (status?.message === OPENCODE_INTERNAL_FAILURE ||
+          status?.message === sourceText("error.provider.opencodeStillStarting")) &&
+        this.#restartTimers.has(provider)
+      )
+        return;
       if (status?.version !== cli.version || !["available", "sign-in-required"].includes(status.state)) {
         const message = status?.message;
         return yield* new ProviderOperationFailed({
@@ -3750,8 +3803,10 @@ export class ProviderRuntime implements ProviderPort {
                     ? message
                     : this.#showStartStopped(provider);
               }
-              if (provider === "opencode" && isOpenCodeInternalFailure(failed))
-                this.#retryAfterTimeout(provider, !disposed());
+              if (provider === "opencode" && isOpenCodeInternalFailure(failed)) {
+                const retryMessage = this.#retryAfterTimeout(provider, !disposed());
+                if (isOpenCodeStarting(failed)) return this.#showOpenCodeStillStarting(failure, retryMessage);
+              }
               return message;
             }),
           ),
@@ -4182,6 +4237,16 @@ export class ProviderRuntime implements ProviderPort {
     recordRestartActivity();
   }, Effect.uninterruptible);
 
+  #showOpenCodeStillStarting(failure: Omit<AgentProviderStatus, "id">, retryMessage: string): string {
+    const message = this.#restartTimers.has("opencode")
+      ? sourceText("error.provider.opencodeStillStarting")
+      : retryMessage;
+    this.#setStatus({
+      providers: updateProviderStatus(this.#status.providers, "opencode", { ...failure, message }),
+    });
+    return message;
+  }
+
   #retryAfterTimeout(provider: AgentProvider, schedule: boolean): string {
     return sourceText(
       this.#scheduleStartRetry(provider, schedule) ? "error.provider.cliTimedOut" : "error.provider.cliTimedOutRefresh",
@@ -4392,10 +4457,9 @@ export class ProviderRuntime implements ProviderPort {
     const key = [provider, server, kind].join("\u0000");
     if (this.#reportedMcpFailures.has(key)) return;
     this.#reportedMcpFailures.add(key);
-    this.#emitError(
-      "mcp_server_not_started",
-      sourceText(MCP_PROVIDER_FAILURE_TEXT[kind], { provider: providerLabel(provider), name: server }),
-    );
+    const text = sourceText(MCP_PROVIDER_FAILURE_TEXT[kind], { provider: providerLabel(provider), name: server });
+    if (kind === "sign_in" && this.#reportMcpSignIn) this.#reportMcpSignIn(provider, server, text);
+    else this.#emitError("mcp_server_not_started", text);
   }
 
   #reportGitHubToolsFailure(provider: AgentProvider): void {
@@ -4423,6 +4487,14 @@ export class ProviderRuntime implements ProviderPort {
     model?: string,
     emit = true,
   ) {
+    if (client.provider === "codex" && !(yield* this.#readCodexRoute(client))) {
+      if (this.#clients.get(client.provider) === client) {
+        this.#lastUsage.delete(client.provider);
+        this.#ownResetCredits.delete(client.provider);
+        this.#usageUnreported.add(client.provider);
+      }
+      return { limits: [] } satisfies AccountUsage;
+    }
     const rateLimits = yield* client
       .request(
         "account/rateLimits/read",
@@ -4447,6 +4519,18 @@ export class ProviderRuntime implements ProviderPort {
     if (emit) this.#emit({ type: "usage-changed", usage: structuredClone(usage) });
     return structuredClone(usage);
   });
+
+  #readCodexRoute(client: AgentClient) {
+    return readCodexRoutesToOpenai(client, providerCheckTimeoutMs(5_000)).pipe(
+      Effect.tap((routesToOpenai) => Effect.sync(() => this.#codexRoutesToOpenai.set(client, routesToOpenai))),
+      Effect.catch(() =>
+        Effect.sync(() => {
+          logger.warn("Codex did not give its model route. OpenBot reads the ChatGPT usage.");
+          return this.#codexRoutesToOpenai.get(client) ?? true;
+        }),
+      ),
+    );
+  }
 
   #setStatus(patch: Partial<AgentStatus>): void {
     const available: AgentProvider[] = [];
@@ -4476,5 +4560,16 @@ export class ProviderOperationFailed extends Schema.TaggedError<ProviderOperatio
   cause: Schema.Defect(),
 }) {}
 const { sync: providerStep, rewrap: toProviderOperationFailed } = causeHelpers(ProviderOperationFailed);
+
+function readFailedLimit(provider: AgentProvider): AccountUsageLimit {
+  return { id: provider, primary: null, secondary: null, readFailed: true };
+}
+
+function usageReadRefused(error: { readonly cause: unknown }): boolean {
+  return (
+    (error.cause instanceof RequestError && error.cause.code === -32000) ||
+    ["auth", "permission"].includes(classifyUserError(error.cause))
+  );
+}
 
 export { toProviderOperationFailed };

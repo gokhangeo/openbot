@@ -337,8 +337,10 @@ export const messages = {
   "mobile.server.route.invite": "Invitar personas",
   "mobile.server.route.member": "Miembro",
   "mobile.server.route.timezone": "Zona horaria",
+  "mobile.server.route.signalHome": "Servidor de Signal",
   "mobile.server.route.personality": "Personalidad del agente",
   "mobile.server.route.agents": "Agentes",
+  "mobile.server.route.voiceModel": "Reconocimiento de voz",
   "mobile.server.settings.storage": "Almacenamiento",
   "mobile.server.route.storage": "Almacenamiento",
   "mobile.server.route.storageFiles": "Todos los archivos",
@@ -466,6 +468,43 @@ export const messages = {
   "mobile.server.settings.timezoneUnavailable":
     "Conéctate a este servidor como propietario o administrador para cambiar su zona horaria.",
   "mobile.server.settings.timezoneUnsupported": "Actualiza OpenBot en este servidor para cambiar aquí su zona horaria.",
+  "mobile.server.settings.signalHomeAutomatic": "Automático",
+  "mobile.server.settings.signalHomeNearest": "El servidor de Signal más cercano",
+  "mobile.server.settings.signalHomeInUse": "En uso: {name}",
+  "mobile.server.settings.signalHomeLoading": "Midiendo los servidores de Signal…",
+  "mobile.server.settings.signalHomeSaveFailed": "No se pudo cambiar el servidor de Signal. Inténtalo de nuevo.",
+  "mobile.server.settings.signalHomeUnavailable":
+    "Conéctate a este servidor como propietario o administrador para cambiar su servidor de Signal.",
+  "mobile.server.settings.signalHomeUnsupported":
+    "Actualiza OpenBot en este servidor para cambiar aquí su servidor de Signal.",
+  "mobile.server.settings.signalHomeDescription":
+    "Los miembros se conectan a este servidor a través de este servidor de Signal. Un servidor de Signal con menos latencia da conexiones más rápidas.",
+  "mobile.server.settings.signalHomeFallback":
+    "{chosen} no responde. El servidor usa {name} hasta que {chosen} vuelva a responder.",
+  "mobile.server.settings.signalHomeMoving":
+    "El servidor se cambia a {name}. Los miembros se vuelven a conectar en unos segundos.",
+  "mobile.server.settings.signalHomeLoadFailed": "No se pudieron cargar los servidores de Signal.",
+  "mobile.server.settings.signalHomeLatency": "{latency} ms",
+  "mobile.server.settings.signalHomeNoAnswer": "Sin respuesta",
+  "mobile.server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "mobile.server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "mobile.server.settings.signalHomePlaceSanJose": "San José",
+  "mobile.server.settings.signalHomePlaceSydney": "Sídney",
+  "mobile.server.settings.signalHomePlaceSingapore": "Singapur",
+  "mobile.server.settings.voiceModelDescription":
+    "Los agentes de este servidor usan este modelo para transcribir el sonido de los vídeos que no tienen subtítulos.",
+  "mobile.server.settings.voiceModelLoading": "Cargando el reconocimiento de voz…",
+  "mobile.server.settings.voiceModelLoadFailed": "No se pudo cargar el modelo de reconocimiento de voz del servidor.",
+  "mobile.server.settings.voiceModelSaveFailed":
+    "No se pudo cambiar el modelo de reconocimiento de voz. Inténtalo de nuevo.",
+  "mobile.server.settings.voiceModelUnsupported":
+    "Actualiza OpenBot en este servidor para cambiar aquí su reconocimiento de voz.",
+  "mobile.server.settings.voiceModelReady": "Listo",
+  "mobile.server.settings.voiceModelDownloading": "Descargando: {percent}",
+  "mobile.server.settings.voiceModelSize": "Descarga de {size}",
+  "mobile.server.settings.voiceModelDownload": "Descargar",
+  "mobile.server.settings.voiceModelCancel": "Detener descarga",
+  "mobile.server.settings.voiceModelRemove": "Quitar",
   "mobile.server.settings.keySection": "Clave del servidor",
   "mobile.server.settings.keyChanged": "Último cambio",
   "mobile.server.settings.keyChange": "Cambiar clave",
@@ -915,7 +954,7 @@ export const messages = {
   "mobile.server.connectors.whatsapp.ownNumberNote":
     "Tu chat «Envíate un mensaje» y las personas que permitas pueden contactar con OpenBot.",
   "mobile.server.connectors.whatsapp.dedicatedNote":
-    "Las personas que permitas pueden contactar con OpenBot. Las demás reciben un código para dártelo.",
+    "Tu chat «Envíate un mensaje» y las personas que permitas pueden contactar con OpenBot. Las demás reciben un código para dártelo.",
   "mobile.server.connectors.whatsapp.helpLoggedOut":
     "WhatsApp quitó este servidor de los dispositivos vinculados. Vuelve a vincular el número.",
   "mobile.server.connectors.whatsapp.helpError":
@@ -1157,10 +1196,15 @@ export const messages = {
   "mobile.server.providers.modelsFailed": "No se pudieron cambiar los modelos. Inténtalo de nuevo.",
   "mobile.server.providers.promptCache": "Caché de prompts",
   "mobile.server.providers.promptCacheHint":
-    "Cuánto tiempo guarda Claude el contexto de un agente en la caché entre turnos. El cambio se aplica cuando Claude se reinicia.",
-  "mobile.server.providers.promptCacheDefault": "Predeterminado de Claude Code",
+    "Cuánto tiempo Claude y Pi guardan el contexto de un agente en la caché entre turnos. El cambio se aplica cuando el proveedor se inicia de nuevo.",
+  "mobile.server.providers.promptCacheDefault": "Predeterminado del proveedor",
   "mobile.server.providers.promptCacheHour": "1 hora",
   "mobile.server.providers.promptCacheLoadFailed": "No se pudo cargar el tiempo de caché de prompts de este servidor.",
+  "mobile.server.providers.cacheExpiryCompaction": "Compactar antes de que caduque la caché",
+  "mobile.server.providers.cacheExpiryCompactionHint":
+    "Cuando un chat con 200K o más tokens de contexto está inactivo con una caché de 1 hora, el agente compacta el contexto antes de que caduque la caché. Así el siguiente mensaje no vuelve a leer todo el contexto sin caché.",
+  "mobile.server.providers.cacheExpiryCompactionLoadFailed":
+    "No se pudo cargar el ajuste de compactación de este servidor.",
   "mobile.server.providers.compactWindow": "Compactar chats en",
   "mobile.server.providers.compactWindowHint":
     "Claude Code resume los turnos antiguos de un chat cuando el chat alcanza este tamaño. Menos mantiene los turnos rápidos y baratos. Más conserva más detalle. Un modelo con una ventana más pequeña compacta en su propio límite.",
@@ -1215,6 +1259,8 @@ export const messages = {
     "ChatGPT usa esta clave, no tu plan de ChatGPT. OpenAI cobra cada solicitud a la clave. No se muestra el uso del plan.",
   "mobile.server.providers.codexKeyAlternative":
     "O inicia sesión con una clave de API de OpenAI. OpenAI cobra cada solicitud a la clave.",
+  "mobile.server.providers.museKeyInUse":
+    "Muse usa esta clave, no tu inicio de sesión. Para usar tu inicio de sesión, elimina la clave.",
   "mobile.server.providers.sectionUse": "Uso",
   "mobile.server.providers.unused": "Ningún agente lo usa",
   "mobile.server.providers.usedByCount": { one: "1 agente lo usa", other: "{count} agentes lo usan" },
@@ -1385,7 +1431,7 @@ export const messages = {
   "mobile.server.update.waitingFor": "Esperando {reasons}.",
   "mobile.server.update.disabledTitle": "Las actualizaciones remotas están desactivadas",
   "mobile.server.update.disabledDescription":
-    "El usuario de {name} desactivó las actualizaciones de los miembros del servidor. Pídele que actualice OpenBot o que active el ajuste.",
+    "El usuario de {name} desactivó las actualizaciones de los miembros del servidor. Pídele que actualice OpenBot o que abra Ajustes > Actualizaciones en su equipo y active «Permitir actualizaciones de los miembros del servidor».",
   "mobile.server.update.managedTitle": "Un Host Manager controla las actualizaciones",
   "mobile.server.update.managedDescription":
     "OpenBot Host Manager actualiza {name}. Contacta con el administrador del host.",

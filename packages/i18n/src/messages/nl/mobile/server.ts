@@ -334,8 +334,10 @@ export const messages = {
   "mobile.server.route.invite": "Mensen uitnodigen",
   "mobile.server.route.member": "Lid",
   "mobile.server.route.timezone": "Tijdzone",
+  "mobile.server.route.signalHome": "Signal-server",
   "mobile.server.route.personality": "Agentpersoonlijkheid",
   "mobile.server.route.agents": "Agents",
+  "mobile.server.route.voiceModel": "Spraakherkenning",
   "mobile.server.settings.storage": "Opslag",
   "mobile.server.route.storage": "Opslag",
   "mobile.server.route.storageFiles": "Alle bestanden",
@@ -464,6 +466,42 @@ export const messages = {
   "mobile.server.settings.timezoneUnavailable":
     "Maak verbinding met deze server als eigenaar of beheerder om de tijdzone te wijzigen.",
   "mobile.server.settings.timezoneUnsupported": "Werk OpenBot bij op deze server om de tijdzone hier te wijzigen.",
+  "mobile.server.settings.signalHomeAutomatic": "Automatisch",
+  "mobile.server.settings.signalHomeNearest": "De dichtstbijzijnde Signal-server",
+  "mobile.server.settings.signalHomeInUse": "In gebruik: {name}",
+  "mobile.server.settings.signalHomeLoading": "Signal-servers meten…",
+  "mobile.server.settings.signalHomeSaveFailed": "Kan de Signal-server niet wijzigen. Probeer het opnieuw.",
+  "mobile.server.settings.signalHomeUnavailable":
+    "Maak als eigenaar of beheerder verbinding met deze server om de Signal-server te wijzigen.",
+  "mobile.server.settings.signalHomeUnsupported":
+    "Werk OpenBot op deze server bij om de Signal-server hier te wijzigen.",
+  "mobile.server.settings.signalHomeDescription":
+    "Leden maken via deze Signal-server verbinding met deze server. Een Signal-server met een lagere latentie geeft snellere verbindingen.",
+  "mobile.server.settings.signalHomeFallback":
+    "{chosen} antwoordt niet. De server gebruikt {name} tot {chosen} weer antwoordt.",
+  "mobile.server.settings.signalHomeMoving":
+    "De server gaat over naar {name}. Leden maken binnen enkele seconden opnieuw verbinding.",
+  "mobile.server.settings.signalHomeLoadFailed": "Kan de Signal-servers niet laden.",
+  "mobile.server.settings.signalHomeLatency": "{latency} ms",
+  "mobile.server.settings.signalHomeNoAnswer": "Geen antwoord",
+  "mobile.server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "mobile.server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "mobile.server.settings.signalHomePlaceSanJose": "San Jose",
+  "mobile.server.settings.signalHomePlaceSydney": "Sydney",
+  "mobile.server.settings.signalHomePlaceSingapore": "Singapore",
+  "mobile.server.settings.voiceModelDescription":
+    "Agents op deze server gebruiken dit model om het geluid van video’s zonder ondertiteling uit te schrijven.",
+  "mobile.server.settings.voiceModelLoading": "Spraakherkenning laden…",
+  "mobile.server.settings.voiceModelLoadFailed": "Kan het spraakherkenningsmodel van de server niet laden.",
+  "mobile.server.settings.voiceModelSaveFailed": "Kan het spraakherkenningsmodel niet wijzigen. Probeer het opnieuw.",
+  "mobile.server.settings.voiceModelUnsupported":
+    "Werk OpenBot bij op deze server om de spraakherkenning hier te wijzigen.",
+  "mobile.server.settings.voiceModelReady": "Klaar",
+  "mobile.server.settings.voiceModelDownloading": "Downloaden: {percent}",
+  "mobile.server.settings.voiceModelSize": "Download van {size}",
+  "mobile.server.settings.voiceModelDownload": "Downloaden",
+  "mobile.server.settings.voiceModelCancel": "Download stoppen",
+  "mobile.server.settings.voiceModelRemove": "Verwijderen",
   "mobile.server.settings.keySection": "Serversleutel",
   "mobile.server.settings.keyChanged": "Laatste wijziging",
   "mobile.server.settings.keyChange": "Sleutel wijzigen",
@@ -876,7 +914,7 @@ export const messages = {
   "mobile.server.connectors.whatsapp.ownNumberNote":
     "Je chat “Bericht aan jezelf” en de mensen die je toestaat bereiken OpenBot.",
   "mobile.server.connectors.whatsapp.dedicatedNote":
-    "De mensen die je toestaat bereiken OpenBot. Anderen krijgen een code om aan jou te geven.",
+    "Je chat “Bericht aan jezelf” en de mensen die je toestaat bereiken OpenBot. Anderen krijgen een code om aan jou te geven.",
   "mobile.server.connectors.whatsapp.helpLoggedOut":
     "WhatsApp heeft deze server uit de gekoppelde apparaten verwijderd. Koppel het nummer opnieuw.",
   "mobile.server.connectors.whatsapp.helpError":
@@ -1113,10 +1151,15 @@ export const messages = {
   "mobile.server.providers.modelsFailed": "Kan de modellen niet wijzigen. Probeer het opnieuw.",
   "mobile.server.providers.promptCache": "Promptcache",
   "mobile.server.providers.promptCacheHint":
-    "Hoe lang Claude de context van een agent tussen beurten in de cache houdt. Een wijziging geldt wanneer Claude opnieuw start.",
-  "mobile.server.providers.promptCacheDefault": "Standaard van Claude Code",
+    "Hoe lang Claude en Pi de context van een agent tussen beurten in de cache houden. Een wijziging geldt wanneer de provider opnieuw start.",
+  "mobile.server.providers.promptCacheDefault": "Standaard van de provider",
   "mobile.server.providers.promptCacheHour": "1 uur",
   "mobile.server.providers.promptCacheLoadFailed": "Kan de promptcachetijd van deze server niet laden.",
+  "mobile.server.providers.cacheExpiryCompaction": "Comprimeren voordat de cache verloopt",
+  "mobile.server.providers.cacheExpiryCompactionHint":
+    "Als een chat met 200K of meer tokens context inactief is met een cache van 1 uur, comprimeert de agent de context voordat de cache verloopt. Dan leest het volgende bericht niet de hele context opnieuw zonder cache.",
+  "mobile.server.providers.cacheExpiryCompactionLoadFailed":
+    "De compressie-instelling van deze server kon niet worden geladen.",
   "mobile.server.providers.compactWindow": "Chats comprimeren bij",
   "mobile.server.providers.compactWindowHint":
     "Claude Code vat de oudere beurten van een chat samen wanneer de chat deze grootte bereikt. Lager houdt beurten snel en goedkoop. Hoger bewaart meer details. Een model met een kleiner venster comprimeert bij zijn eigen limiet.",
@@ -1172,6 +1215,8 @@ export const messages = {
     "ChatGPT gebruikt deze sleutel, niet je ChatGPT-abonnement. OpenAI rekent elk verzoek af op de sleutel. Het gebruik van het abonnement wordt niet getoond.",
   "mobile.server.providers.codexKeyAlternative":
     "Of log in met een OpenAI-API-sleutel. OpenAI rekent elk verzoek af op de sleutel.",
+  "mobile.server.providers.museKeyInUse":
+    "Muse gebruikt deze sleutel, niet je login. Verwijder de sleutel om je login te gebruiken.",
   "mobile.server.providers.sectionUse": "Gebruik",
   "mobile.server.providers.unused": "Geen agent gebruikt deze",
   "mobile.server.providers.usedByCount": { one: "1 agent gebruikt deze", other: "{count} agents gebruiken deze" },
@@ -1342,7 +1387,7 @@ export const messages = {
   "mobile.server.update.waitingFor": "Wachten op {reasons}.",
   "mobile.server.update.disabledTitle": "Externe updates staan uit",
   "mobile.server.update.disabledDescription":
-    "De gebruiker van {name} heeft updates door serverleden uitgezet. Vraag deze persoon OpenBot bij te werken of de instelling aan te zetten.",
+    "De gebruiker van {name} heeft updates door serverleden uitgezet. Vraag diegene om OpenBot bij te werken, of om op die computer Instellingen > Updates te openen en “Sta updates van serverleden toe” aan te zetten.",
   "mobile.server.update.managedTitle": "Een Host Manager beheert updates",
   "mobile.server.update.managedDescription":
     "OpenBot Host Manager werkt {name} bij. Neem contact op met de hostbeheerder.",

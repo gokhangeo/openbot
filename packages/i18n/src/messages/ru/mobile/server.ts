@@ -381,8 +381,10 @@ export const messages = {
   "mobile.server.route.invite": "Пригласить людей",
   "mobile.server.route.member": "Участник",
   "mobile.server.route.timezone": "Часовой пояс",
+  "mobile.server.route.signalHome": "Сервер Signal",
   "mobile.server.route.personality": "Личность агента",
   "mobile.server.route.agents": "Агенты",
+  "mobile.server.route.voiceModel": "Распознавание речи",
   "mobile.server.settings.storage": "Хранилище",
   "mobile.server.route.storage": "Хранилище",
   "mobile.server.route.storageFiles": "Все файлы",
@@ -517,6 +519,42 @@ export const messages = {
     "Подключитесь к этому серверу как владелец или администратор, чтобы изменить его часовой пояс.",
   "mobile.server.settings.timezoneUnsupported":
     "Обновите OpenBot на этом сервере, чтобы изменить здесь его часовой пояс.",
+  "mobile.server.settings.signalHomeAutomatic": "Автоматически",
+  "mobile.server.settings.signalHomeNearest": "Ближайший сервер Signal",
+  "mobile.server.settings.signalHomeInUse": "Используется: {name}",
+  "mobile.server.settings.signalHomeLoading": "Измерение серверов Signal…",
+  "mobile.server.settings.signalHomeSaveFailed": "Не удалось сменить сервер Signal. Попробуйте ещё раз.",
+  "mobile.server.settings.signalHomeUnavailable":
+    "Подключитесь к этому серверу как владелец или администратор, чтобы сменить его сервер Signal.",
+  "mobile.server.settings.signalHomeUnsupported":
+    "Обновите OpenBot на этом сервере, чтобы сменить здесь его сервер Signal.",
+  "mobile.server.settings.signalHomeDescription":
+    "Участники подключаются к этому серверу через этот сервер Signal. Сервер Signal с меньшей задержкой даёт более быстрые подключения.",
+  "mobile.server.settings.signalHomeFallback":
+    "{chosen} не отвечает. Сервер использует {name}, пока {chosen} снова не ответит.",
+  "mobile.server.settings.signalHomeMoving":
+    "Сервер переходит на {name}. Участники снова подключатся через несколько секунд.",
+  "mobile.server.settings.signalHomeLoadFailed": "Не удалось загрузить серверы Signal.",
+  "mobile.server.settings.signalHomeLatency": "{latency} мс",
+  "mobile.server.settings.signalHomeNoAnswer": "Нет ответа",
+  "mobile.server.settings.signalHomePlaceHelsinki1": "Хельсинки 1",
+  "mobile.server.settings.signalHomePlaceHelsinki2": "Хельсинки 2",
+  "mobile.server.settings.signalHomePlaceSanJose": "Сан-Хосе",
+  "mobile.server.settings.signalHomePlaceSydney": "Сидней",
+  "mobile.server.settings.signalHomePlaceSingapore": "Сингапур",
+  "mobile.server.settings.voiceModelDescription":
+    "Агенты на этом сервере используют эту модель, чтобы расшифровывать звук видео без субтитров.",
+  "mobile.server.settings.voiceModelLoading": "Загрузка распознавания речи…",
+  "mobile.server.settings.voiceModelLoadFailed": "Не удалось загрузить модель распознавания речи сервера.",
+  "mobile.server.settings.voiceModelSaveFailed": "Не удалось изменить модель распознавания речи. Попробуйте ещё раз.",
+  "mobile.server.settings.voiceModelUnsupported":
+    "Обновите OpenBot на этом сервере, чтобы изменить здесь распознавание речи.",
+  "mobile.server.settings.voiceModelReady": "Готово",
+  "mobile.server.settings.voiceModelDownloading": "Загрузка: {percent}",
+  "mobile.server.settings.voiceModelSize": "Загрузка {size}",
+  "mobile.server.settings.voiceModelDownload": "Скачать",
+  "mobile.server.settings.voiceModelCancel": "Остановить",
+  "mobile.server.settings.voiceModelRemove": "Удалить",
   "mobile.server.settings.keySection": "Ключ сервера",
   "mobile.server.settings.keyChanged": "Последнее изменение",
   "mobile.server.settings.keyChange": "Сменить ключ",
@@ -1001,7 +1039,7 @@ export const messages = {
   "mobile.server.connectors.whatsapp.ownNumberNote":
     "OpenBot получает сообщения из вашего чата «Сообщение себе» и от людей, которым вы разрешили писать.",
   "mobile.server.connectors.whatsapp.dedicatedNote":
-    "OpenBot получает сообщения от людей, которым вы разрешили писать. Остальные получают код, который нужно передать вам.",
+    "OpenBot получает сообщения из вашего чата «Сообщение себе» и от людей, которым вы разрешили писать. Остальные получают код, который нужно передать вам.",
   "mobile.server.connectors.whatsapp.helpLoggedOut":
     "WhatsApp удалил этот сервер из связанных устройств. Привяжите номер заново.",
   "mobile.server.connectors.whatsapp.helpError":
@@ -1245,10 +1283,14 @@ export const messages = {
   "mobile.server.providers.modelsFailed": "Не удалось изменить модели. Попробуйте ещё раз.",
   "mobile.server.providers.promptCache": "Кеш промптов",
   "mobile.server.providers.promptCacheHint":
-    "Сколько Claude хранит контекст агента в кеше между ходами. Изменение применяется при следующем запуске Claude.",
-  "mobile.server.providers.promptCacheDefault": "По умолчанию Claude Code",
+    "Как долго Claude и Pi хранят контекст агента в кэше между ходами. Изменение применяется при следующем запуске провайдера.",
+  "mobile.server.providers.promptCacheDefault": "По умолчанию у провайдера",
   "mobile.server.providers.promptCacheHour": "1 час",
   "mobile.server.providers.promptCacheLoadFailed": "Не удалось загрузить время кеша промптов этого сервера.",
+  "mobile.server.providers.cacheExpiryCompaction": "Сжимать до истечения кэша",
+  "mobile.server.providers.cacheExpiryCompactionHint":
+    "Когда чат с контекстом от 200K токенов простаивает с кэшем на 1 час, агент сжимает контекст до истечения кэша. Тогда следующее сообщение не читает весь контекст заново без кэша.",
+  "mobile.server.providers.cacheExpiryCompactionLoadFailed": "Не удалось загрузить настройку сжатия этого сервера.",
   "mobile.server.providers.compactWindow": "Сжимать чаты при",
   "mobile.server.providers.compactWindowHint":
     "Claude Code кратко излагает старые ходы чата, когда чат достигает этого размера. Меньше — ходы быстрее и дешевле. Больше — сохраняется больше деталей. Модель с меньшим окном сжимает на своём пределе.",
@@ -1303,6 +1345,8 @@ export const messages = {
     "ChatGPT использует этот ключ, а не ваш план ChatGPT. OpenAI списывает оплату за каждый запрос с ключа. Расход по плану не показывается.",
   "mobile.server.providers.codexKeyAlternative":
     "Или войдите с API-ключом OpenAI. OpenAI списывает оплату за каждый запрос с ключа.",
+  "mobile.server.providers.museKeyInUse":
+    "Muse использует этот ключ, а не ваш вход. Чтобы использовать вход, удалите ключ.",
   "mobile.server.providers.sectionUse": "Использование",
   "mobile.server.providers.unused": "Не используется агентами",
   "mobile.server.providers.usedByCount": {
@@ -1493,7 +1537,7 @@ export const messages = {
   "mobile.server.update.waitingFor": "Ожидание: {reasons}.",
   "mobile.server.update.disabledTitle": "Удалённые обновления отключены",
   "mobile.server.update.disabledDescription":
-    "Пользователь {name} отключил обновления от участников сервера. Попросите его обновить OpenBot или включить эту настройку.",
+    "Пользователь {name} отключил обновления от участников сервера. Попросите его обновить OpenBot или открыть на своём компьютере «Настройки» > «Обновления» и включить «Разрешить обновления от участников сервера».",
   "mobile.server.update.managedTitle": "Обновлениями управляет Host Manager",
   "mobile.server.update.managedDescription":
     "OpenBot Host Manager обновляет {name}. Обратитесь к администратору хоста.",
